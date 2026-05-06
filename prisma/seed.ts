@@ -253,6 +253,77 @@ async function main() {
       }),
     ),
   );
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+
+  const calendarEvents = [
+    {
+      id: "seed-calendar-manager-standup",
+      userId: manager1.id,
+      title: "Product operations standup",
+      notes: "Review delivery risks, blockers, and owner updates.",
+      location: "Google Meet",
+      type: "MEETING",
+      startAt: new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 10, 0),
+      endAt: new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 10, 30),
+      reminderMinutes: 10,
+    },
+    {
+      id: "seed-calendar-manager-client",
+      userId: manager1.id,
+      title: "Client readiness sync",
+      notes: "Confirm deployment, access, and handoff checklist.",
+      location: "Zoom",
+      type: "MEETING",
+      startAt: new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 15, 0),
+      endAt: new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 16, 0),
+      reminderMinutes: 30,
+    },
+    {
+      id: "seed-calendar-member-focus",
+      userId: member1.id,
+      title: "Focus block: handoff notes",
+      notes: "Prepare context notes for the launch sprint.",
+      location: null,
+      type: "FOCUS",
+      startAt: new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 11, 0),
+      endAt: new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 12, 30),
+      reminderMinutes: 10,
+    },
+    {
+      id: "seed-calendar-member-reminder",
+      userId: member1.id,
+      title: "Update task progress",
+      notes: "Move assigned cards and post blocker comments before EOD.",
+      location: null,
+      type: "REMINDER",
+      startAt: new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 17, 0),
+      endAt: new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate(), 17, 15),
+      reminderMinutes: 30,
+    },
+  ] satisfies Prisma.CalendarEventUncheckedCreateInput[];
+
+  await Promise.all(
+    calendarEvents.map((event) =>
+      prisma.calendarEvent.upsert({
+        where: { id: event.id },
+        update: {
+          userId: event.userId,
+          title: event.title,
+          notes: event.notes,
+          location: event.location,
+          type: event.type,
+          startAt: event.startAt,
+          endAt: event.endAt,
+          reminderMinutes: event.reminderMinutes,
+          deletedAt: null,
+        },
+        create: event,
+      }),
+    ),
+  );
 }
 
 main()

@@ -1,4 +1,5 @@
 import type { Priority, Role, TaskStatus } from "@prisma/client";
+import type { CalendarEventStatus, CalendarEventType } from "@prisma/client";
 
 export type DashboardUser = {
   id: string;
@@ -80,4 +81,17 @@ export type DashboardAnalytics = {
   overdue: number;
   status: Array<{ name: string; value: number }>;
   priority: Array<{ name: string; value: number }>;
+};
+
+export type DashboardCalendarEvent = {
+  id: string;
+  title: string;
+  notes: string | null;
+  location: string | null;
+  type: CalendarEventType;
+  status: CalendarEventStatus;
+  startAt: string;
+  endAt: string;
+  reminderMinutes: number | null;
+  userId: string;
 };

@@ -14,6 +14,7 @@ Ethara Teams is a full-stack modular monolith task management and collaboration 
 - Task-level realtime chat with mention notifications.
 - Self-hosted WebSockets with project and task room authorization.
 - Dashboard analytics for task status, priority, and overdue work.
+- Personal calendar for meetings, events, reminders, and focus blocks.
 - Soft delete support for projects and tasks.
 - Installable PWA manifest and service worker.
 - Docker and Railway deployment setup.

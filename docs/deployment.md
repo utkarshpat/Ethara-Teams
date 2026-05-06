@@ -28,6 +28,9 @@
 ## Realtime
 Realtime chat and notifications use self-hosted Socket.IO on the same Railway web service. No external realtime provider is required. The server listens on `/api/socket` and authenticates sockets with the NextAuth session cookie.
 
+## Calendar
+Each user has a private calendar for meetings, events, reminders, and focus blocks. Calendar records are scoped by `userId`, indexed by `userId` and `startAt`, and exposed through authenticated `/api/calendar-events` routes.
+
 ## Local Setup
 1. Copy `.env.example` to `.env`.
 2. Fill `DATABASE_URL` with a local or Railway Postgres URL.

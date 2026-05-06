@@ -33,6 +33,19 @@ enum NotificationType {
   COMMENT
 }
 
+enum CalendarEventType {
+  MEETING
+  EVENT
+  REMINDER
+  FOCUS
+}
+
+enum CalendarEventStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -54,8 +67,32 @@ model User {
   projectMessages ProjectMessage[]
   notifications   Notification[]
   sentInvitations Invitation[]     @relation("InvitationSender")
+  calendarEvents  CalendarEvent[]
 
   @@index([role])
+}
+
+model CalendarEvent {
+  id              String              @id @default(cuid())
+  title           String
+  notes           String?
+  location        String?
+  type            CalendarEventType   @default(EVENT)
+  status          CalendarEventStatus @default(SCHEDULED)
+  startAt         DateTime
+  endAt           DateTime
+  reminderMinutes Int?
+  userId          String
+  deletedAt       DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, startAt])
+  @@index([userId, status])
+  @@index([userId, deletedAt])
 }
 
 model Account {

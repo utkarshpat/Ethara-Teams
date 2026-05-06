@@ -66,6 +66,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useProjectRealtime } from "@/hooks/use-realtime";
+import { CalendarPanel } from "@/modules/dashboard/components/calendar-panel";
 import { KanbanBoard } from "@/modules/dashboard/components/kanban-board";
 import { ProjectChat } from "@/modules/dashboard/components/project-chat";
 import { TaskSheet } from "@/modules/dashboard/components/task-sheet";
@@ -534,6 +535,7 @@ export function DashboardShell({
               </CardContent>
             </Card>
             <div className="grid gap-6">
+              <CalendarPanel />
               <ProjectChat
                 projectId={selectedProjectId}
                 members={selectedProject?.members ?? []}
