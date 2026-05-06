@@ -1,0 +1,5 @@
+[deploy]
+preDeployCommand = "npm run db:deploy"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"

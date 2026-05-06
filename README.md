@@ -1,0 +1,86 @@
+# Ethara Teams
+
+Collaborate. Execute. Scale.
+
+Ethara Teams is a full-stack modular monolith task management and collaboration platform built with Next.js App Router, Prisma, PostgreSQL, NextAuth, self-hosted Socket.IO WebSockets, TanStack Query, Zustand, Tailwind CSS, and shadcn/ui.
+
+## Features
+
+- Credentials and Google authentication through NextAuth.
+- Admin and Member RBAC.
+- Project and team membership management.
+- Project-tenant guard for task, comment, notification, and analytics access.
+- Kanban board with optimistic drag-and-drop.
+- Task-level realtime chat with mention notifications.
+- Self-hosted WebSockets with project and task room authorization.
+- Dashboard analytics for task status, priority, and overdue work.
+- Soft delete support for projects and tasks.
+- Installable PWA manifest and service worker.
+- Docker and Railway deployment setup.
+
+## Local Setup
+
+1. Copy `.env.example` to `.env`.
+2. Fill `DATABASE_URL`, `NEXTAUTH_SECRET`, and `NEXTAUTH_URL`.
+3. Add Google OAuth variables when Google login is needed.
+4. Install dependencies:
+
+```bash
+npm install
+```
+
+5. Run migrations:
+
+```bash
+npm run db:migrate
+```
+
+6. Seed demo data:
+
+```bash
+npm run db:seed
+```
+
+7. Start the app:
+
+```bash
+npm run dev
+```
+
+Demo users after seeding:
+
+- `admin@ethara.dev` / `Password@123`
+- `member@ethara.dev` / `Password@123`
+
+## Railway Deployment
+
+1. Create a Railway project.
+2. Add PostgreSQL.
+3. Add the app service from GitHub.
+4. Set all variables from `.env.example`.
+5. Set `NEXTAUTH_URL` to the Railway public app URL.
+6. Keep the pre-deploy command as `npm run db:deploy`.
+7. Deploy with the included Dockerfile.
+
+## Useful Commands
+
+```bash
+npm run lint
+npm run test
+npm run test:coverage
+npm run test:e2e
+npm run build
+npm run db:format
+npm run db:generate
+npm run db:migrate
+npm run db:deploy
+npm run db:seed
+```
+
+## Architecture Docs
+
+Internal architecture and requirements live in `/docs`.
+
+## Logs
+
+The app emits structured JSON logs to stdout/stderr for Railway. See `/docs/observability.md` for event names and filtering guidance.
