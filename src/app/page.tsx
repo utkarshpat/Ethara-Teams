@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const capabilities = [
@@ -62,6 +63,7 @@ export default function Home() {
               </a>
             </div>
             <div className="flex items-center gap-3">
+              <ThemeToggle />
               <Link href="/login" className={buttonVariants({ variant: "outline" })}>
                 Sign in
               </Link>

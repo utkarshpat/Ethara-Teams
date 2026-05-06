@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ArrowUpRight, CheckCircle2, KeyRound, LockKeyhole, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { LoginForm } from "@/modules/auth/components/login-form";
 
 export const metadata: Metadata = {
@@ -20,6 +21,9 @@ export default function LoginPage() {
             </span>
             Ethara Teams
           </Link>
+          <div className="absolute right-8 top-8">
+            <ThemeToggle />
+          </div>
           <div className="flex flex-col gap-8">
             <div className="flex max-w-xl flex-col gap-4">
               <h1 className="text-4xl font-bold leading-tight">
@@ -70,9 +74,7 @@ export default function LoginPage() {
                 </span>
                 Ethara Teams
               </Link>
-              <Link href="/" className="text-sm text-muted-foreground">
-                Home
-              </Link>
+              <ThemeToggle />
             </div>
             <div className="flex flex-col gap-3">
               <div className="mono-meta inline-flex w-fit items-center gap-2 rounded-md border border-white/10 bg-primary/10 px-3 py-2 text-xs font-medium text-primary">

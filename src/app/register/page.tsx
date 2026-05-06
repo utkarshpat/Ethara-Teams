@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CheckCircle2, ShieldCheck, UsersRound } from "lucide-react";
 import Link from "next/link";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { RegisterForm } from "@/modules/auth/components/register-form";
 
 export const metadata: Metadata = {
@@ -11,7 +12,7 @@ export default function RegisterPage() {
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
       <section className="glass-panel cyber-grid mx-auto grid min-h-[calc(100vh-2.5rem)] w-full max-w-6xl overflow-hidden rounded-lg lg:grid-cols-[0.94fr_1.06fr]">
-        <div className="flex flex-col justify-center bg-[#030712]/40 p-6 sm:p-10">
+        <div className="relative flex flex-col justify-center bg-[#030712]/40 p-6 sm:p-10">
           <div className="mx-auto flex w-full max-w-md flex-col gap-7">
             <div className="flex flex-col gap-3">
               <Link href="/" className="flex items-center gap-3 text-base font-semibold tracking-normal">
@@ -20,6 +21,9 @@ export default function RegisterPage() {
                 </span>
                 Ethara Teams
               </Link>
+              <div className="absolute right-6 top-6 lg:hidden">
+                <ThemeToggle />
+              </div>
               <div className="pt-4">
                 <h1 className="text-3xl font-bold text-foreground">
                   Create your Ethara account
@@ -34,6 +38,9 @@ export default function RegisterPage() {
         </div>
         <div className="relative hidden border-l border-white/10 bg-[#030712]/72 p-8 text-white lg:flex lg:flex-col lg:justify-between">
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-primary via-[#7e22ce] to-transparent" />
+          <div className="absolute right-8 top-8">
+            <ThemeToggle />
+          </div>
           <div className="flex flex-col gap-5">
             <div className="grid size-12 place-items-center rounded-md bg-primary/15 text-primary">
               <UsersRound />

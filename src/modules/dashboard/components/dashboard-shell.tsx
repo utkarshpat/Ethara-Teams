@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Card,
   CardContent,
@@ -341,6 +342,7 @@ export function DashboardShell({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <ThemeToggle />
           <div className="flex items-center gap-2 rounded-md border border-white/10 bg-[#11182766] px-3 py-2 backdrop-blur-xl">
             <span className="grid size-7 place-items-center rounded-md bg-primary/15 text-primary">
               <Bell />
