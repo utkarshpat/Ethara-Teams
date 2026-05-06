@@ -6,24 +6,12 @@ import GoogleProvider from "next-auth/providers/google";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { applyPendingInvitations } from "@/modules/invitations";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
 });
-
-function getAdminEmails() {
-  return new Set(
-    (process.env.ADMIN_EMAILS ?? "")
-      .split(",")
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean),
-  );
-}
-
-function isConfiguredAdmin(email?: string | null) {
-  return Boolean(email && getAdminEmails().has(email.toLowerCase()));
-}
 
 const providers: NextAuthOptions["providers"] = [
   CredentialsProvider({
@@ -46,6 +34,11 @@ const providers: NextAuthOptions["providers"] = [
       if (!user?.passwordHash) {
         logger.warn("auth.credentials_missing_user", { email: parsed.data.email });
         return null;
+      }
+
+      if (!user.emailVerified) {
+        logger.warn("auth.credentials_unverified_email", { userId: user.id });
+        throw new Error("EMAIL_NOT_VERIFIED");
       }
 
       const isValid = await compare(parsed.data.password, user.passwordHash);
@@ -89,19 +82,10 @@ export const authOptions: NextAuthOptions = {
   providers,
   callbacks: {
     async signIn({ user, account }) {
-      if (account?.provider === "google" && user.email) {
-        const shouldPromote = isConfiguredAdmin(user.email);
-
-        if (shouldPromote) {
-          await prisma.user.updateMany({
-            where: { email: user.email.toLowerCase() },
-            data: { role: "ADMIN" },
-          });
-        }
-
+      if (account?.provider === "google" && user.email && user.id) {
+        await applyPendingInvitations(user.email, user.id);
         logger.info("auth.google_success", {
           userId: user.id,
-          configuredAdmin: shouldPromote,
         });
       }
 
@@ -139,12 +123,16 @@ export const authOptions: NextAuthOptions = {
       logger.info("auth.user_created", { userId: user.id });
       const userCount = await prisma.user.count();
 
-      if (userCount === 1 || isConfiguredAdmin(user.email)) {
+      if (userCount === 1) {
         await prisma.user.update({
           where: { id: user.id },
-          data: { role: "ADMIN" },
+          data: { role: "ADMIN", emailVerified: new Date() },
         });
         logger.info("auth.user_promoted", { userId: user.id });
+      }
+
+      if (user.email) {
+        await applyPendingInvitations(user.email, user.id);
       }
     },
   },

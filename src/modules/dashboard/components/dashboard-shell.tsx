@@ -269,15 +269,20 @@ export function DashboardShell({
 
   const memberMutation = useMutation({
     mutationFn: (payload: { email: string; role: "ADMIN" | "MEMBER" }) =>
-      fetchJson(`/api/projects/${selectedProjectId}/members`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }),
-    onSuccess: async () => {
+      fetchJson<{ kind: "member" | "invitation" }>(
+        `/api/projects/${selectedProjectId}/members`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      ),
+    onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
       setMemberDialogOpen(false);
-      toast.success("Member updated");
+      toast.success(
+        result.kind === "invitation" ? "Invitation sent" : "Member updated",
+      );
     },
     onError: (error) => toast.error(error.message),
   });
@@ -380,8 +385,8 @@ export function DashboardShell({
           </DropdownMenu>
         </div>
       </header>
-      <div className="grid flex-1 gap-5 xl:grid-cols-[280px_1fr]">
-        <aside className="glass-panel flex flex-col gap-5 rounded-lg p-4">
+      <div className="grid flex-1 items-start gap-5 lg:grid-cols-[260px_1fr] xl:grid-cols-[280px_1fr]">
+        <aside className="glass-panel sticky top-6 flex flex-col gap-6 rounded-lg p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold tracking-normal">Projects</h2>
@@ -472,8 +477,8 @@ export function DashboardShell({
             </div>
           </div>
         </aside>
-        <section className="flex min-w-0 flex-col gap-5">
-          <div className="grid gap-4 lg:grid-cols-4">
+        <section className="flex min-w-0 flex-col gap-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard title="Total tasks" value={analytics.total} icon={ListTodo} />
             <MetricCard title="Overdue" value={analytics.overdue} icon={AlertCircle} />
             <MetricCard
@@ -493,7 +498,7 @@ export function DashboardShell({
             />
           </div>
 
-          <div className="grid gap-4 2xl:grid-cols-[1fr_360px]">
+          <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
             <Card className="glass-panel rounded-lg">
               <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
@@ -528,7 +533,7 @@ export function DashboardShell({
                 />
               </CardContent>
             </Card>
-            <div className="grid gap-4">
+            <div className="grid gap-6">
               <ProjectChat
                 projectId={selectedProjectId}
                 members={selectedProject?.members ?? []}
@@ -833,7 +838,7 @@ function MemberDialog({
         <DialogHeader>
           <DialogTitle>Add team member</DialogTitle>
           <DialogDescription>
-            Add an existing user to this project boundary.
+            Invite by email or update an existing user. Admin role requires a global Admin.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -867,7 +872,7 @@ function MemberDialog({
             </Field>
           </FieldGroup>
           <Button type="submit" disabled={isPending}>
-            Save member
+            Send invite
           </Button>
         </form>
       </DialogContent>

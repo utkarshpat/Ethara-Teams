@@ -1,79 +1,43 @@
 import type { Metadata } from "next";
-import { CheckCircle2, ShieldCheck, UsersRound } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { RegisterForm } from "@/modules/auth/components/register-form";
 
 export const metadata: Metadata = {
-  title: "Create account",
+  title: "Start workspace",
 };
 
 export default function RegisterPage() {
   return (
-    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
-      <section className="glass-panel cyber-grid mx-auto grid min-h-[calc(100vh-2.5rem)] w-full max-w-6xl overflow-hidden rounded-lg lg:grid-cols-[0.94fr_1.06fr]">
-        <div className="relative flex flex-col justify-center bg-[#030712]/40 p-6 sm:p-10">
-          <div className="mx-auto flex w-full max-w-md flex-col gap-7">
-            <div className="flex flex-col gap-3">
-              <Link href="/" className="flex items-center gap-3 text-base font-semibold tracking-normal">
-                <span className="grid size-10 place-items-center rounded-md bg-primary text-sm text-primary-foreground shadow-[0_0_20px_rgba(255,0,255,0.35)]">
-                  ET
-                </span>
-                Ethara Teams
-              </Link>
-              <div className="absolute right-6 top-6 lg:hidden">
-                <ThemeToggle />
-              </div>
-              <div className="pt-4">
-                <h1 className="text-3xl font-bold text-foreground">
-                  Create your Ethara account
-                </h1>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Join your team workspace with Google or organization email.
-                </p>
-              </div>
-            </div>
-            <RegisterForm />
-          </div>
-        </div>
-        <div className="relative hidden border-l border-white/10 bg-[#030712]/72 p-8 text-white lg:flex lg:flex-col lg:justify-between">
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-primary via-[#7e22ce] to-transparent" />
-          <div className="absolute right-8 top-8">
-            <ThemeToggle />
-          </div>
-          <div className="flex flex-col gap-5">
-            <div className="grid size-12 place-items-center rounded-md bg-primary/15 text-primary">
-              <UsersRound />
-            </div>
-            <h2 className="max-w-md text-4xl font-bold leading-tight">
-              Bring project ownership, execution, and communication into one workspace.
+    <main className="relative min-h-screen flex items-center justify-center overflow-hidden bg-background">
+      {/* Modern ambient background glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] opacity-50 pointer-events-none" />
+      
+      <section className="glass-panel w-full max-w-[400px] rounded-2xl p-8 relative z-10">
+        <div className="flex flex-col gap-8">
+          <div className="flex flex-col items-center justify-center text-center">
+            <Link href="/" className="group mb-6 inline-flex">
+              <span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-lg font-bold text-primary border border-primary/20 transition-transform group-hover:scale-105">
+                ET
+              </span>
+            </Link>
+            <h2 className="text-2xl font-bold text-foreground tracking-tight">
+              Create an account
             </h2>
-            <p className="max-w-md text-sm leading-6 text-muted-foreground">
-              Ethara Teams gives growing teams a single place to structure work,
-              protect project access, and collaborate at the task level.
+            <p className="text-sm text-muted-foreground mt-1">
+              Join Ethara and setup your workspace
             </p>
           </div>
-          <div className="grid gap-3">
-            {[
-              ["Workspace-ready roles", "Admin and Member access flows are separated from the start."],
-              ["Google sign-in", "Use a familiar identity provider for faster onboarding."],
-              ["Delivery context", "Projects, tasks, comments, and notifications stay connected."],
-            ].map(([title, body]) => (
-              <div key={title} className="flex items-start gap-3 rounded-md border border-white/10 bg-[#11182766] p-4 text-sm backdrop-blur-xl">
-                <CheckCircle2 className="mt-0.5 size-5 text-primary" />
-                <div>
-                  <p className="font-semibold">{title}</p>
-                  <p className="mt-1 leading-6 text-muted-foreground">{body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <ShieldCheck className="size-5 text-primary" />
-            Project membership checks protect every workspace boundary.
-          </div>
+          <Suspense>
+            <RegisterForm />
+          </Suspense>
         </div>
       </section>
+      
+      <div className="absolute top-6 right-6">
+        <ThemeToggle />
+      </div>
     </main>
   );
 }

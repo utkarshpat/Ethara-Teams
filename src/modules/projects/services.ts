@@ -2,6 +2,7 @@ import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AppError, ensureProjectMembership } from "@/lib/guards";
 import { logger } from "@/lib/logger";
+import { createInvitation } from "@/modules/invitations";
 import type { addMemberSchema, projectCreateSchema } from "@/modules/projects/validators";
 import type { z } from "zod";
 
@@ -79,32 +80,61 @@ export async function addProjectMember(
   input: AddMemberInput,
 ) {
   await ensureProjectMembership({ userId, projectId, roles: ["ADMIN"] });
+  const email = input.email.toLowerCase();
+
+  const actor = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+
+  if (input.role === "ADMIN" && actor?.role !== "ADMIN") {
+    logger.warn("project.admin_invite_denied", { projectId, actorId: userId });
+    throw new AppError("Only global admins can appoint admins", 403);
+  }
 
   const target = await prisma.user.findUnique({
-    where: { email: input.email.toLowerCase() },
-    select: { id: true },
+    where: { email },
+    select: { id: true, role: true },
   });
 
   if (!target) {
-    logger.warn("project.member_missing_user", { projectId, actorId: userId });
-    throw new AppError("User not found", 404);
+    const invitation = await createInvitation({
+      email,
+      role: input.role as Role,
+      projectId,
+      invitedById: userId,
+    });
+
+    return {
+      kind: "invitation" as const,
+      invitation,
+    };
   }
 
-  const member = await prisma.projectMember.upsert({
-    where: {
-      projectId_userId: {
+  const member = await prisma.$transaction(async (tx) => {
+    if (input.role === "ADMIN" && target.role !== "ADMIN") {
+      await tx.user.update({
+        where: { id: target.id },
+        data: { role: "ADMIN" },
+      });
+    }
+
+    return tx.projectMember.upsert({
+      where: {
+        projectId_userId: {
+          projectId,
+          userId: target.id,
+        },
+      },
+      create: {
         projectId,
         userId: target.id,
+        role: input.role as Role,
       },
-    },
-    create: {
-      projectId,
-      userId: target.id,
-      role: input.role as Role,
-    },
-    update: {
-      role: input.role as Role,
-    },
+      update: {
+        role: input.role as Role,
+      },
+    });
   });
 
   logger.info("project.member_upserted", {
@@ -113,7 +143,10 @@ export async function addProjectMember(
     memberUserId: target.id,
     role: input.role,
   });
-  return member;
+  return {
+    kind: "member" as const,
+    member,
+  };
 }
 
 export async function softDeleteProject(userId: string, projectId: string) {

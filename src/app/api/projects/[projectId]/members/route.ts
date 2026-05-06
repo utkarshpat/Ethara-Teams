@@ -25,8 +25,10 @@ export async function POST(request: Request, context: ProjectRouteContext) {
     const user = await requireApiUser();
     const { projectId } = await context.params;
     const input = addMemberSchema.parse(await request.json());
-    const member = await addProjectMember(user.id, projectId, input);
-    return NextResponse.json(member, { status: 201 });
+    const result = await addProjectMember(user.id, projectId, input);
+    return NextResponse.json(result, {
+      status: result.kind === "invitation" ? 202 : 201,
+    });
   } catch (error) {
     return apiError(error);
   }
