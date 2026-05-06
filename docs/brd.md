@@ -6,13 +6,13 @@ Ethara Teams is a unified work environment for small teams that need project pla
 ## Business Goals
 - Reduce tool switching between task trackers, chat apps, and status dashboards.
 - Improve task completion visibility for founders, team leads, freelancers, and student organizations.
-- Provide a deployable MVP suitable for evaluation with real authentication, database-backed workflows, and Railway hosting.
+- Provide a production-ready team operations product with real authentication, database-backed workflows, and Railway hosting.
 - Establish a modular monolith foundation that can grow without losing code ownership boundaries.
 
 ## Target Users
 - Admins who create projects, invite members, assign tasks, and monitor progress.
 - Members who execute assigned tasks, update status, and collaborate inside task threads.
-- Reviewers or selection panels who need a live, functional demo with clear architecture and deployment readiness.
+- Client stakeholders who need a live, functional product with clear architecture and deployment readiness.
 
 ## Success Metrics
 - Users can complete signup/login, project creation, task assignment, and progress tracking in one flow.
@@ -20,7 +20,7 @@ Ethara Teams is a unified work environment for small teams that need project pla
 - Task-level comments and mentions reduce context loss during execution.
 - Railway deployment can be completed with documented environment variables and migration steps.
 
-## MVP Scope
+## Product Scope
 - Authentication with Google OAuth and email/password credentials.
 - Admin/Member RBAC.
 - Project and team membership management.

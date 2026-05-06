@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, LogIn, ShieldCheck, UserRoundCheck } from "lucide-react";
+import { Loader2, LogIn } from "lucide-react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -25,15 +25,21 @@ const loginSchema = z.object({
 
 type LoginValues = z.infer<typeof loginSchema>;
 
+function GoogleMark() {
+  return (
+    <span className="grid size-5 place-items-center rounded-full bg-white text-xs font-bold text-[#1f2937]">
+      G
+    </span>
+  );
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isGoogleLoading, setGoogleLoading] = useState(false);
-  const [isDemoLoading, setDemoLoading] = useState(false);
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -42,7 +48,6 @@ export function LoginForm() {
       password: "",
     },
   });
-  const isAuthLoading = isSubmitting || isDemoLoading;
 
   async function onSubmit(values: LoginValues) {
     const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
@@ -69,102 +74,71 @@ export function LoginForm() {
     });
   }
 
-  async function handleDemoLogin(values: LoginValues) {
-    setDemoLoading(true);
-    setValue("email", values.email, { shouldValidate: true });
-    setValue("password", values.password, { shouldValidate: true });
-    try {
-      await onSubmit(values);
-    } finally {
-      setDemoLoading(false);
-    }
-  }
-
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
-      <FieldGroup>
-        <Field data-invalid={Boolean(errors.email)}>
-          <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            aria-invalid={Boolean(errors.email)}
-            {...register("email")}
-          />
-          {errors.email ? (
-            <FieldDescription>{errors.email.message}</FieldDescription>
-          ) : null}
-        </Field>
-        <Field data-invalid={Boolean(errors.password)}>
-          <FieldLabel htmlFor="password">Password</FieldLabel>
-          <Input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            aria-invalid={Boolean(errors.password)}
-            {...register("password")}
-          />
-          {errors.password ? (
-            <FieldDescription>{errors.password.message}</FieldDescription>
-          ) : null}
-        </Field>
-      </FieldGroup>
-      <Button type="submit" disabled={isAuthLoading}>
-        {isAuthLoading ? (
-          <Loader2 data-icon="inline-start" className="animate-spin" />
-        ) : (
-          <LogIn data-icon="inline-start" />
-        )}
-        Sign in
-      </Button>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={isAuthLoading}
-          onClick={() =>
-            handleDemoLogin({
-              email: "admin@ethara.dev",
-              password: "Password@123",
-            })
-          }
-        >
-          <ShieldCheck data-icon="inline-start" />
-          Admin demo
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={isAuthLoading}
-          onClick={() =>
-            handleDemoLogin({
-              email: "member@ethara.dev",
-              password: "Password@123",
-            })
-          }
-        >
-          <UserRoundCheck data-icon="inline-start" />
-          Member demo
-        </Button>
-      </div>
+    <div className="flex flex-col gap-5">
       <Button
         type="button"
-        variant="outline"
+        size="lg"
         onClick={handleGoogle}
-        disabled={isGoogleLoading || isAuthLoading}
+        disabled={isGoogleLoading || isSubmitting}
+        className="w-full"
       >
         {isGoogleLoading ? (
           <Loader2 data-icon="inline-start" className="animate-spin" />
-        ) : null}
+        ) : (
+          <GoogleMark />
+        )}
         Continue with Google
       </Button>
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-white/10" />
+        <span className="text-xs text-muted-foreground">or sign in with email</span>
+        <div className="h-px flex-1 bg-white/10" />
+      </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+        <FieldGroup>
+          <Field data-invalid={Boolean(errors.email)}>
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              aria-invalid={Boolean(errors.email)}
+              {...register("email")}
+            />
+            {errors.email ? (
+              <FieldDescription>{errors.email.message}</FieldDescription>
+            ) : null}
+          </Field>
+          <Field data-invalid={Boolean(errors.password)}>
+            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <Input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              aria-invalid={Boolean(errors.password)}
+              {...register("password")}
+            />
+            {errors.password ? (
+              <FieldDescription>{errors.password.message}</FieldDescription>
+            ) : null}
+          </Field>
+        </FieldGroup>
+        <Button type="submit" variant="outline" disabled={isSubmitting || isGoogleLoading}>
+          {isSubmitting ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <LogIn data-icon="inline-start" />
+          )}
+          Sign in with email
+        </Button>
+      </form>
       <p className="text-center text-sm text-muted-foreground">
-        New here?{" "}
+        New to Ethara?{" "}
         <Link href="/register" className="font-medium text-foreground">
           Create an account
         </Link>
       </p>
-    </form>
+    </div>
   );
 }

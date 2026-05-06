@@ -29,7 +29,7 @@ test("redirects anonymous dashboard users to login", async ({ page }) => {
   await expect(page).toHaveURL(/\/login/);
 });
 
-test("admin demo can access management controls", async ({ page }) => {
+test("admin can access management controls", async ({ page }) => {
   await loginAs(page, "admin@ethara.dev");
   await expect(page.getByRole("button", { name: "New project" })).toBeVisible({
     timeout: dashboardTimeout,
@@ -38,7 +38,7 @@ test("admin demo can access management controls", async ({ page }) => {
   await expect(page.getByRole("button", { name: "New task" })).toBeVisible();
 });
 
-test("member demo cannot access admin controls", async ({ page }) => {
+test("member cannot access admin controls", async ({ page }) => {
   await loginAs(page, "member@ethara.dev");
   await expect(page.getByRole("button", { name: "New project" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Add member" })).toHaveCount(0);

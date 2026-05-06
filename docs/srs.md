@@ -29,8 +29,8 @@
 
 ## Acceptance Criteria
 - A new user can register, sign in, and open the dashboard.
-- A seeded admin can create a project and task.
-- A seeded member can update an assigned task and comment on it.
+- An Admin can create a project and task.
+- A Member can update an assigned task and comment on it.
 - Moving a task on the Kanban board updates the UI optimistically and persists through the API.
 - Mentioning a project member creates a notification with a direct task link.
 - `npm run build` passes after `DATABASE_URL` is configured.

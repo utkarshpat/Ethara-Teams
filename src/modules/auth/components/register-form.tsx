@@ -5,6 +5,7 @@ import { Loader2, UserPlus } from "lucide-react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,8 +25,17 @@ type RegisterValues = {
   password: string;
 };
 
+function GoogleMark() {
+  return (
+    <span className="grid size-5 place-items-center rounded-full bg-white text-xs font-bold text-[#1f2937]">
+      G
+    </span>
+  );
+}
+
 export function RegisterForm() {
   const router = useRouter();
+  const [isGoogleLoading, setGoogleLoading] = useState(false);
   const {
     register,
     handleSubmit,
@@ -58,44 +68,102 @@ export function RegisterForm() {
     router.refresh();
   }
 
+  async function handleGoogle() {
+    setGoogleLoading(true);
+    await signIn("google", {
+      callbackUrl: "/dashboard",
+    });
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
-      <FieldGroup>
-        <Field data-invalid={Boolean(errors.name)}>
-          <FieldLabel htmlFor="name">Name</FieldLabel>
-          <Input id="name" autoComplete="name" aria-invalid={Boolean(errors.name)} {...register("name")} />
-          {errors.name ? <FieldDescription>{errors.name.message}</FieldDescription> : null}
-        </Field>
-        <Field data-invalid={Boolean(errors.username)}>
-          <FieldLabel htmlFor="username">Username</FieldLabel>
-          <Input id="username" autoComplete="username" aria-invalid={Boolean(errors.username)} {...register("username")} />
-          {errors.username ? (
-            <FieldDescription>{errors.username.message}</FieldDescription>
-          ) : null}
-        </Field>
-        <Field data-invalid={Boolean(errors.email)}>
-          <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" type="email" autoComplete="email" aria-invalid={Boolean(errors.email)} {...register("email")} />
-          {errors.email ? <FieldDescription>{errors.email.message}</FieldDescription> : null}
-        </Field>
-        <Field data-invalid={Boolean(errors.password)}>
-          <FieldLabel htmlFor="password">Password</FieldLabel>
-          <Input id="password" type="password" autoComplete="new-password" aria-invalid={Boolean(errors.password)} {...register("password")} />
-          {errors.password ? (
-            <FieldDescription>{errors.password.message}</FieldDescription>
-          ) : null}
-        </Field>
-      </FieldGroup>
-      <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <UserPlus data-icon="inline-start" />}
-        Create account
+    <div className="flex flex-col gap-5">
+      <Button
+        type="button"
+        size="lg"
+        onClick={handleGoogle}
+        disabled={isGoogleLoading || isSubmitting}
+        className="w-full"
+      >
+        {isGoogleLoading ? (
+          <Loader2 data-icon="inline-start" className="animate-spin" />
+        ) : (
+          <GoogleMark />
+        )}
+        Sign up with Google
       </Button>
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-white/10" />
+        <span className="text-xs text-muted-foreground">or create with email</span>
+        <div className="h-px flex-1 bg-white/10" />
+      </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
+        <FieldGroup>
+          <Field data-invalid={Boolean(errors.name)}>
+            <FieldLabel htmlFor="name">Name</FieldLabel>
+            <Input
+              id="name"
+              autoComplete="name"
+              aria-invalid={Boolean(errors.name)}
+              {...register("name")}
+            />
+            {errors.name ? (
+              <FieldDescription>{errors.name.message}</FieldDescription>
+            ) : null}
+          </Field>
+          <Field data-invalid={Boolean(errors.username)}>
+            <FieldLabel htmlFor="username">Username</FieldLabel>
+            <Input
+              id="username"
+              autoComplete="username"
+              aria-invalid={Boolean(errors.username)}
+              {...register("username")}
+            />
+            {errors.username ? (
+              <FieldDescription>{errors.username.message}</FieldDescription>
+            ) : null}
+          </Field>
+          <Field data-invalid={Boolean(errors.email)}>
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              aria-invalid={Boolean(errors.email)}
+              {...register("email")}
+            />
+            {errors.email ? (
+              <FieldDescription>{errors.email.message}</FieldDescription>
+            ) : null}
+          </Field>
+          <Field data-invalid={Boolean(errors.password)}>
+            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <Input
+              id="password"
+              type="password"
+              autoComplete="new-password"
+              aria-invalid={Boolean(errors.password)}
+              {...register("password")}
+            />
+            {errors.password ? (
+              <FieldDescription>{errors.password.message}</FieldDescription>
+            ) : null}
+          </Field>
+        </FieldGroup>
+        <Button type="submit" variant="outline" disabled={isSubmitting || isGoogleLoading}>
+          {isSubmitting ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <UserPlus data-icon="inline-start" />
+          )}
+          Create account with email
+        </Button>
+      </form>
       <p className="text-center text-sm text-muted-foreground">
-        Already have an account?{" "}
+        Already using Ethara?{" "}
         <Link href="/login" className="font-medium text-foreground">
           Sign in
         </Link>
       </p>
-    </form>
+    </div>
   );
 }

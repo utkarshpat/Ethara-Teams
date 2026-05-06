@@ -3,6 +3,10 @@ import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+const projectName = "Product Operations";
+const projectDescription =
+  "Central workspace for product delivery, ownership, and cross-functional execution.";
+
 async function main() {
   const passwordHash = await hash("Password@123", 12);
 
@@ -43,15 +47,15 @@ async function main() {
   const project = await prisma.project.upsert({
     where: { id: "seed-project-ethara" },
     update: {
-      name: "Ethara Launch Sprint",
-      description: "Selection-ready MVP build with task collaboration.",
+      name: projectName,
+      description: projectDescription,
       ownerId: admin.id,
       deletedAt: null,
     },
     create: {
       id: "seed-project-ethara",
-      name: "Ethara Launch Sprint",
-      description: "Selection-ready MVP build with task collaboration.",
+      name: projectName,
+      description: projectDescription,
       ownerId: admin.id,
       members: {
         create: [
@@ -96,8 +100,8 @@ async function main() {
   const tasks = [
       {
         id: "seed-task-dashboard",
-        title: "Finalize dashboard analytics",
-        description: "Ship status, priority, and overdue summaries.",
+        title: "Review operations dashboard",
+        description: "Validate status, priority, and overdue summaries for weekly planning.",
         projectId: project.id,
         assignedToId: admin.id,
         priority: "HIGH",
@@ -107,8 +111,8 @@ async function main() {
       },
       {
         id: "seed-task-chat",
-        title: "Review task-level chat UX",
-        description: "Validate mentions and realtime thread behavior.",
+        title: "Coordinate client handoff",
+        description: "Use task comments, mentions, and references to align the handoff owner.",
         projectId: project.id,
         assignedToId: member.id,
         priority: "URGENT",
@@ -118,8 +122,8 @@ async function main() {
       },
       {
         id: "seed-task-deploy",
-        title: "Prepare Railway deployment",
-        description: "Connect Postgres, env vars, and migration flow.",
+        title: "Resolve release blockers",
+        description: "Confirm environment readiness, database health, and release ownership.",
         projectId: project.id,
         assignedToId: admin.id,
         priority: "MEDIUM",
@@ -133,7 +137,17 @@ async function main() {
     tasks.map((task) =>
       prisma.task.upsert({
         where: { id: task.id },
-        update: {},
+        update: {
+          title: task.title,
+          description: task.description,
+          projectId: task.projectId,
+          assignedToId: task.assignedToId,
+          priority: task.priority,
+          status: task.status,
+          order: task.order,
+          dueDate: task.dueDate,
+          deletedAt: null,
+        },
         create: task,
       }),
     ),

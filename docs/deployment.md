@@ -33,6 +33,6 @@ Realtime chat and notifications use self-hosted Socket.IO on the same Railway we
 5. Run `npm run db:seed`.
 6. Run `npm run dev`.
 
-## Demo Users From Seed
+## Starter Workspace Users
 - Admin: `admin@ethara.dev` / `Password@123`
 - Member: `member@ethara.dev` / `Password@123`

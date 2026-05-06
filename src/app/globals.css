@@ -55,66 +55,66 @@
   --card-foreground: #f8fafc;
   --popover: rgb(17 24 39 / 86%);
   --popover-foreground: #f8fafc;
-  --primary: #6366f1;
+  --primary: #ff00ff;
   --primary-foreground: #ffffff;
-  --secondary: rgb(126 34 206 / 26%);
+  --secondary: rgb(126 34 206 / 32%);
   --secondary-foreground: #f8fafc;
   --muted: rgb(17 24 39 / 72%);
   --muted-foreground: #94a3b8;
-  --accent: rgb(99 102 241 / 40%);
+  --accent: rgb(255 0 255 / 24%);
   --accent-foreground: #ffffff;
   --destructive: #fb7185;
   --border: rgb(255 255 255 / 8%);
   --input: rgb(3 7 18 / 72%);
-  --ring: #6366f1;
-  --chart-1: #6366f1;
-  --chart-2: #8b5cf6;
+  --ring: #ff00ff;
+  --chart-1: #ff00ff;
+  --chart-2: #7e22ce;
   --chart-3: #38bdf8;
   --chart-4: #f43f5e;
   --chart-5: #22c55e;
   --radius: 0.5rem;
   --sidebar: rgb(17 24 39 / 42%);
   --sidebar-foreground: #f8fafc;
-  --sidebar-primary: #6366f1;
+  --sidebar-primary: #ff00ff;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgb(99 102 241 / 32%);
+  --sidebar-accent: rgb(255 0 255 / 18%);
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: rgb(255 255 255 / 8%);
-  --sidebar-ring: #6366f1;
+  --sidebar-ring: #ff00ff;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.60 0.15 260);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.60 0.15 260);
-  --chart-1: oklch(0.60 0.15 260);
-  --chart-2: oklch(0.65 0.18 290);
-  --chart-3: oklch(0.70 0.12 210);
-  --chart-4: oklch(0.65 0.20 15);
-  --chart-5: oklch(0.65 0.15 145);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.60 0.15 260);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.60 0.15 260);
+  --background: #030712;
+  --foreground: #f8fafc;
+  --card: rgb(17 24 39 / 42%);
+  --card-foreground: #f8fafc;
+  --popover: rgb(17 24 39 / 86%);
+  --popover-foreground: #f8fafc;
+  --primary: #ff00ff;
+  --primary-foreground: #ffffff;
+  --secondary: rgb(126 34 206 / 32%);
+  --secondary-foreground: #f8fafc;
+  --muted: rgb(17 24 39 / 72%);
+  --muted-foreground: #94a3b8;
+  --accent: rgb(255 0 255 / 24%);
+  --accent-foreground: #ffffff;
+  --destructive: #fb7185;
+  --border: rgb(255 255 255 / 8%);
+  --input: rgb(3 7 18 / 72%);
+  --ring: #ff00ff;
+  --chart-1: #ff00ff;
+  --chart-2: #7e22ce;
+  --chart-3: #38bdf8;
+  --chart-4: #f43f5e;
+  --chart-5: #22c55e;
+  --sidebar: rgb(17 24 39 / 42%);
+  --sidebar-foreground: #f8fafc;
+  --sidebar-primary: #ff00ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgb(255 0 255 / 18%);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgb(255 255 255 / 8%);
+  --sidebar-ring: #ff00ff;
 }
 
 @layer base {
@@ -139,17 +139,6 @@
     mask-image: linear-gradient(to bottom, black, transparent 78%);
     pointer-events: none;
   }
-  body::after {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    content: "";
-    background:
-      radial-gradient(circle at 15% 8%, rgb(99 102 241 / 12%), transparent 24rem),
-      radial-gradient(circle at 82% 18%, rgb(139 92 246 / 15%), transparent 26rem),
-      radial-gradient(circle at 55% 100%, rgb(56 189 248 / 8%), transparent 32rem);
-    pointer-events: none;
-  }
   html {
     @apply font-sans;
   }
@@ -172,7 +161,7 @@
   }
 
   .neon-glow {
-    box-shadow: 0 0 20px rgb(99 102 241 / 30%);
+    box-shadow: 0 0 20px rgb(255 0 255 / 30%);
   }
 
   .mono-meta {

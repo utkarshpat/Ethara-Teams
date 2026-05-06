@@ -35,7 +35,7 @@ npm install
 npm run db:migrate
 ```
 
-6. Seed demo data:
+6. Load the production starter workspace:
 
 ```bash
 npm run db:seed
@@ -47,10 +47,10 @@ npm run db:seed
 npm run dev
 ```
 
-Demo users after seeding:
+Starter workspace users:
 
-- `admin@ethara.dev` / `Password@123`
-- `member@ethara.dev` / `Password@123`
+- Admin: `admin@ethara.dev` / `Password@123`
+- Member: `member@ethara.dev` / `Password@123`
 
 ## Railway Deployment
 

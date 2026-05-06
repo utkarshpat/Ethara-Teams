@@ -6,7 +6,7 @@ Scope: Auth, RBAC, project/task assignment, Kanban, task comments, project chat,
 
 ## Executive Summary
 
-Ethara Teams is working as a functional modular monolith MVP. The app builds successfully, the database schema is valid and migrated, dashboard access is protected, project tenant guards are enforced in services, Admin and Member UI differences are visible, task assignment works, task-level comments work, project-level chat works, and mention notifications are persisted.
+Ethara Teams is working as a functional modular monolith product baseline. The app builds successfully, the database schema is valid and migrated, dashboard access is protected, project tenant guards are enforced in services, Admin and Member UI differences are visible, task assignment works, task-level comments work, project-level chat works, and mention notifications are persisted.
 
 One production-impacting UI issue was found during audit: custom Base UI select dropdowns were unreliable in assignment-critical forms. It caused one smoke task to be created without the selected assignee during browser automation. This was fixed by replacing those admin-critical dropdowns with styled native selects in task creation, member role selection, and task reassignment controls.
 
@@ -64,7 +64,7 @@ The last guard was tightened during audit. Members can still update progress on 
 
 ## Current Working State
 
-- Credentials auth works for seeded Admin and Member users.
+- Credentials auth works for starter Admin and Member users.
 - Google OAuth is wired and will work after production OAuth env variables are set.
 - Admin can create projects, add existing members, create tasks, assign tasks, and reassign tasks.
 - Member can see assigned project workspace, project chat, task comments, notifications, and read-only non-assigned tasks.
@@ -111,4 +111,4 @@ The last guard was tightened during audit. Members can still update progress on 
 
 ## Test Data Cleanup
 
-Temporary audit tasks, comments, project messages, and notifications created with `Audit...` prefixes were cleaned up after verification. Temporary tasks were soft-deleted to also validate the soft-delete path without affecting seed data.
+Audit tasks, comments, project messages, and notifications created with `Audit...` prefixes were cleaned up after verification. Audit tasks were soft-deleted to also validate the soft-delete path without affecting starter workspace data.
