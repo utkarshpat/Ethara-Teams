@@ -18,7 +18,7 @@ Result summary:
 | Credentials auth | Pass | Manager and member demo accounts authenticate. |
 | Google OAuth entry | Pass | Login CTA is visible and redirects to Google OAuth. Full callback requires a real Google user session. |
 | Dashboard routes | Pass | `/dashboard`, `/dashboard/tasks`, `/dashboard/calendar`, `/dashboard/chat`, `/dashboard/reports`, `/dashboard/team` deep-link correctly. |
-| Sidebar icons | Partial | Home, Tasks, Calendar, Chat, Reports, Team navigate correctly. Settings was mapped to Reports in deployed build; fixed locally with `/dashboard/settings`. |
+| Sidebar icons | Pass | Home, Tasks, Calendar, Chat, Reports, Team navigate correctly. Settings route was added and verified on production at `/dashboard/settings`. |
 | RBAC | Pass | Members cannot create projects/tasks or see admin controls. |
 | Project tenant isolation | Pass | New projects are isolated; non-members get `403 Project access denied`. |
 | Project/team flow | Pass | Admin can create project, add existing member, then assign task to that member. |
@@ -76,7 +76,7 @@ Dedicated route checks:
 | `/dashboard/chat` | Pass |
 | `/dashboard/reports` | Pass |
 | `/dashboard/team` | Pass |
-| `/dashboard/settings` | Fixed locally, pending deployment |
+| `/dashboard/settings` | Pass |
 
 ### Authentication
 
@@ -142,17 +142,17 @@ Important note: an initial task assignment test tried to assign a user who was n
 
 ## Findings
 
-### F-001: Settings icon routes to Reports in deployed build
+### F-001: Settings icon routes to Reports in previous deployed build
 
 Severity: Medium  
-Status: Fixed locally, pending deployment  
+Status: Fixed and deployed  
 Evidence: Clicking `Settings` navigated to `/dashboard/reports?projectId=seed-project-ethara`.  
-Fix: Added `settings` to `DashboardView`, added `/dashboard/settings`, included settings in rail items, and added a `SettingsPanel`.
+Fix: Added `settings` to `DashboardView`, added `/dashboard/settings`, included settings in rail items, and added a `SettingsPanel`. Production retest confirmed `/dashboard/settings?projectId=seed-project-ethara` renders successfully.
 
 ### F-002: Error boundary hardening not yet deployed
 
 Severity: Medium  
-Status: Fixed locally, pending deployment  
+Status: Fixed and deployed  
 Evidence: Local audit found the error boundary used nested document tags and exposed raw error text.  
 Fix: `src/app/error.tsx` now renders a layout-safe fallback and avoids exposing raw exception messages.
 
@@ -180,9 +180,8 @@ Recommendation: add request throttling for auth, comments, project chat, task mu
 
 ## Release Recommendation
 
-Production is usable for client review after the local fixes are pushed and Railway redeploys. The main functional flows are green. Before final handoff, complete these items:
+Production is usable for client review. The main functional flows are green, and the Settings route/error-boundary fixes have been pushed and verified after Railway redeploy. Before final handoff, complete these items:
 
-1. Deploy the local Settings route and error-boundary fixes.
-2. Manually complete one Google OAuth callback with a real test account.
-3. Add automated Playwright coverage for production-like sidebar navigation and the new project/team/task assignment flow.
-4. Add rate limiting for public write endpoints.
+1. Manually complete one Google OAuth callback with a real test account.
+2. Add automated Playwright coverage for production-like sidebar navigation and the new project/team/task assignment flow.
+3. Add rate limiting for public write endpoints.
