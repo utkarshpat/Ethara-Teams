@@ -23,7 +23,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactElement } from "react";
 import {
   Bar,
   BarChart,
@@ -82,6 +82,7 @@ import type {
   DashboardProject,
   DashboardTask,
   DashboardUser,
+  DashboardView,
 } from "@/modules/dashboard/types";
 import { useUiStore } from "@/stores/ui-store";
 
@@ -92,9 +93,8 @@ type DashboardShellProps = {
   initialAnalytics: DashboardAnalytics;
   initialNotifications: DashboardNotification[];
   initialProjectId: string | null;
+  initialView: DashboardView;
 };
-
-type DashboardView = "board" | "calendar" | "chat" | "reports";
 
 const chartConfig = {
   value: {
@@ -110,27 +110,28 @@ const priorityColors = {
   URGENT: "var(--chart-4)",
 };
 
+const statusColors: Record<string, string> = {
+  TODO: "#ff00ff",
+  "IN PROGRESS": "#06b6d4",
+  REVIEW: "#a855f7",
+  DONE: "#10b981",
+};
+
 const selectClassName =
   "h-9 w-full rounded-lg border border-input bg-input px-3 text-sm text-foreground outline-none transition focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/35";
 
 const railItems: Array<{
   label: string;
   icon: LucideIcon;
-  view: DashboardView | "team";
+  view: DashboardView;
+  href: string;
 }> = [
-  { label: "Home", icon: LayoutDashboard, view: "board" },
-  { label: "Tasks", icon: ListTodo, view: "board" },
-  { label: "Calendar", icon: CalendarDays, view: "calendar" },
-  { label: "Chat", icon: MessageSquare, view: "chat" },
-  { label: "Reports", icon: BarChart3, view: "reports" },
-  { label: "Team", icon: Users, view: "team" },
-];
-
-const workViews: Array<{ id: DashboardView; label: string }> = [
-  { id: "board", label: "Active sprint" },
-  { id: "calendar", label: "Calendar" },
-  { id: "chat", label: "Project chat" },
-  { id: "reports", label: "Reports" },
+  { label: "Home", icon: LayoutDashboard, view: "overview", href: "/dashboard" },
+  { label: "Tasks", icon: ListTodo, view: "board", href: "/dashboard/tasks" },
+  { label: "Calendar", icon: CalendarDays, view: "calendar", href: "/dashboard/calendar" },
+  { label: "Chat", icon: MessageSquare, view: "chat", href: "/dashboard/chat" },
+  { label: "Reports", icon: BarChart3, view: "reports", href: "/dashboard/reports" },
+  { label: "Team", icon: Users, view: "team", href: "/dashboard/team" },
 ];
 
 async function fetchJson<T>(url: string, init?: RequestInit) {
@@ -166,6 +167,31 @@ function todayLabel() {
   }).format(new Date());
 }
 
+function viewPath(view: DashboardView) {
+  if (view === "overview") {
+    return "/dashboard";
+  }
+
+  if (view === "board") {
+    return "/dashboard/tasks";
+  }
+
+  return `/dashboard/${view}`;
+}
+
+function viewLabel(view: DashboardView) {
+  const labels: Record<DashboardView, string> = {
+    overview: "Project overview",
+    board: "Active sprint",
+    calendar: "Calendar",
+    chat: "Project chat",
+    reports: "Reports",
+    team: "Team",
+  };
+
+  return labels[view];
+}
+
 export function DashboardShell({
   currentUser,
   initialProjects,
@@ -173,12 +199,13 @@ export function DashboardShell({
   initialAnalytics,
   initialNotifications,
   initialProjectId,
+  initialView,
 }: DashboardShellProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const selectedTaskId = useUiStore((state) => state.selectedTaskId);
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId);
-  const [activeView, setActiveView] = useState<DashboardView>("board");
+  const [activeView, setActiveView] = useState<DashboardView>(initialView);
   const [optimisticTasks, setOptimisticTasks] = useState<DashboardTask[] | null>(
     null,
   );
@@ -246,6 +273,7 @@ export function DashboardShell({
       : "MEMBER";
   const canManageProject =
     Boolean(selectedProject) && selectedProjectRole === "ADMIN";
+  const canCreateTask = Boolean(selectedProject) && canManageProject;
   const roleLabel = selectedProject
     ? `Project ${selectedProjectRole}`
     : currentUser.role;
@@ -366,7 +394,7 @@ export function DashboardShell({
   function handleProjectSelect(projectId: string) {
     setOptimisticTasks(null);
     setSelectedProjectId(projectId);
-    router.push(`/dashboard?projectId=${projectId}`);
+    router.push(`${viewPath(activeView)}?projectId=${projectId}`);
   }
 
   function canMoveTask(task: DashboardTask) {
@@ -378,14 +406,11 @@ export function DashboardShell({
       <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] w-full max-w-[1760px] overflow-hidden rounded-2xl border border-white/10 bg-[#070d22]/85 shadow-2xl shadow-black/30 backdrop-blur-2xl">
         <WorkspaceRail
           activeView={activeView}
+          selectedProjectId={selectedProjectId}
           unreadCount={unreadCount}
           onSelect={(view) => {
-            if (view === "team") {
-              setMemberDialogOpen(true);
-              return;
-            }
-
             setActiveView(view);
+            router.push(`${viewPath(view)}${selectedProjectId ? `?projectId=${selectedProjectId}` : ""}`);
           }}
         />
         <WorkspaceSidebar
@@ -400,6 +425,9 @@ export function DashboardShell({
           isMemberDialogOpen={isMemberDialogOpen}
           setMemberDialogOpen={setMemberDialogOpen}
           memberMutation={memberMutation}
+          isTaskDialogOpen={isTaskDialogOpen}
+          setTaskDialogOpen={setTaskDialogOpen}
+          taskMutation={taskMutation}
           onProjectSelect={handleProjectSelect}
         />
 
@@ -414,13 +442,9 @@ export function DashboardShell({
             <ScrollArea className="min-h-0">
               <div className="flex min-w-0 flex-col gap-5 p-4 lg:p-5">
                 <ProjectCommandHeader
-                  currentUser={currentUser}
                   selectedProject={selectedProject}
                   selectedProjectRole={selectedProjectRole}
                   canManageProject={canManageProject}
-                  isProjectDialogOpen={isProjectDialogOpen}
-                  setProjectDialogOpen={setProjectDialogOpen}
-                  projectMutation={projectMutation}
                   isMemberDialogOpen={isMemberDialogOpen}
                   setMemberDialogOpen={setMemberDialogOpen}
                   memberMutation={memberMutation}
@@ -433,7 +457,7 @@ export function DashboardShell({
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                       <div className="min-w-0">
                         <CardTitle className="truncate">
-                          {selectedProject?.name ?? "Execution workspace"}
+                          {viewLabel(activeView)}
                         </CardTitle>
                         <CardDescription>
                           {canManageProject
@@ -442,18 +466,7 @@ export function DashboardShell({
                         </CardDescription>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        {workViews.map((view) => (
-                          <Button
-                            key={view.id}
-                            type="button"
-                            size="sm"
-                            variant={activeView === view.id ? "default" : "outline"}
-                            onClick={() => setActiveView(view.id)}
-                          >
-                            {view.label}
-                          </Button>
-                        ))}
-                        {selectedProject && canManageProject ? (
+                        {selectedProject && canCreateTask && activeView === "board" ? (
                           <TaskDialog
                             open={isTaskDialogOpen}
                             onOpenChange={setTaskDialogOpen}
@@ -466,6 +479,14 @@ export function DashboardShell({
                     </div>
                   </CardHeader>
                   <CardContent className="p-4">
+                    {activeView === "overview" ? (
+                      <OverviewPanel
+                        selectedProject={selectedProject}
+                        analytics={analytics}
+                        statusData={statusData}
+                        notifications={notificationsQuery.data}
+                      />
+                    ) : null}
                     {activeView === "board" ? (
                       <KanbanBoard
                         tasks={boardTasks}
@@ -492,6 +513,15 @@ export function DashboardShell({
                         analytics={analytics}
                         statusData={statusData}
                         notifications={notificationsQuery.data}
+                      />
+                    ) : null}
+                    {activeView === "team" ? (
+                      <TeamPanel
+                        selectedProject={selectedProject}
+                        canManageProject={canManageProject}
+                        isMemberDialogOpen={isMemberDialogOpen}
+                        setMemberDialogOpen={setMemberDialogOpen}
+                        memberMutation={memberMutation}
                       />
                     ) : null}
                   </CardContent>
@@ -528,12 +558,14 @@ export function DashboardShell({
 
 function WorkspaceRail({
   activeView,
+  selectedProjectId,
   unreadCount,
   onSelect,
 }: {
   activeView: DashboardView;
+  selectedProjectId: string | null;
   unreadCount: number;
-  onSelect: (view: DashboardView | "team") => void;
+  onSelect: (view: DashboardView) => void;
 }) {
   return (
     <aside className="hidden w-[68px] shrink-0 flex-col items-center gap-4 border-r border-white/10 bg-[#17082e]/90 px-3 py-4 text-white lg:flex">
@@ -544,17 +576,14 @@ function WorkspaceRail({
         {railItems.map((item) => {
           const Icon = item.icon;
           const isActive =
-            item.label === "Tasks"
-              ? activeView === "board"
-              : item.view !== "team" &&
-                item.label !== "Home" &&
-                item.view === activeView;
+            item.view === activeView;
 
           return (
             <button
               key={item.label}
               type="button"
               onClick={() => onSelect(item.view)}
+              data-href={`${item.href}${selectedProjectId ? `?projectId=${selectedProjectId}` : ""}`}
               className={cn(
                 "relative grid size-11 place-items-center rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white",
                 isActive && "bg-white/12 text-white shadow-inner",
@@ -596,6 +625,9 @@ function WorkspaceSidebar({
   isMemberDialogOpen,
   setMemberDialogOpen,
   memberMutation,
+  isTaskDialogOpen,
+  setTaskDialogOpen,
+  taskMutation,
   onProjectSelect,
 }: {
   currentUser: DashboardUser;
@@ -609,16 +641,25 @@ function WorkspaceSidebar({
   isMemberDialogOpen: boolean;
   setMemberDialogOpen: (open: boolean) => void;
   memberMutation: ReturnType<typeof useMutation<{ kind: "member" | "invitation" }, Error, { email: string; role: "ADMIN" | "MEMBER" }>>;
+  isTaskDialogOpen: boolean;
+  setTaskDialogOpen: (open: boolean) => void;
+  taskMutation: ReturnType<typeof useMutation<DashboardTask, Error, {
+    title: string;
+    description?: string;
+    priority: Priority;
+    dueDate?: string | null;
+    assignedToId?: string | null;
+  }>>;
   onProjectSelect: (projectId: string) => void;
 }) {
   return (
-    <aside className="hidden w-[292px] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-[#32105d]/88 via-[#241044]/88 to-[#130a28]/90 text-white xl:flex">
+    <aside className="hidden w-[272px] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-[#2b0d52]/92 via-[#1b0b35]/92 to-[#090513]/94 text-white shadow-2xl shadow-black/25 xl:flex">
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
             <button
               type="button"
-              className="flex items-center justify-between gap-3 px-5 py-5 text-left transition hover:bg-white/[0.04]"
+              className="flex items-center justify-between gap-3 px-4 py-4 text-left transition hover:bg-white/[0.04]"
             />
           }
         >
@@ -647,58 +688,112 @@ function WorkspaceSidebar({
               ) : null}
             </DropdownMenuItem>
           ))}
+          {currentUser.role === "ADMIN" ? (
+            <DropdownMenuItem
+              onClick={(event) => {
+                event.preventDefault();
+                setProjectDialogOpen(true);
+              }}
+            >
+              <Plus />
+              New project
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
             <LogOut />
             Log out
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <ProjectDialog
+        open={isProjectDialogOpen}
+        onOpenChange={setProjectDialogOpen}
+        onSubmit={(payload) => projectMutation.mutate(payload)}
+        isPending={projectMutation.isPending}
+        trigger={null}
+      />
 
-      <ScrollArea className="flex-1 px-4">
-        <div className="flex flex-col gap-6 pb-5">
+      <ScrollArea className="flex-1 px-3">
+        <div className="flex flex-col gap-5 pb-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold">Projects</p>
               <p className="text-xs text-white/50">{projects.length} active</p>
             </div>
-            {currentUser.role === "ADMIN" ? (
-              <ProjectDialog
-                open={isProjectDialogOpen}
-                onOpenChange={setProjectDialogOpen}
-                onSubmit={(payload) => projectMutation.mutate(payload)}
-                isPending={projectMutation.isPending}
+            {selectedProject && canManageProject ? (
+              <TaskDialog
+                open={isTaskDialogOpen}
+                onOpenChange={setTaskDialogOpen}
+                members={selectedProject.members}
+                onSubmit={(payload) => taskMutation.mutate(payload)}
+                isPending={taskMutation.isPending}
               />
             ) : null}
           </div>
 
-          <div className="flex flex-col gap-1">
-            {projects.map((project) => (
-              <button
-                key={project.id}
-                type="button"
-                onClick={() => onProjectSelect(project.id)}
-                className={cn(
-                  "group rounded-xl px-3 py-3 text-left transition",
-                  project.id === selectedProjectId
-                    ? "bg-primary/95 text-white shadow-[0_0_24px_rgba(255,0,255,0.24)]"
-                    : "text-white/72 hover:bg-white/10 hover:text-white",
-                )}
-              >
-                <span className="flex items-center justify-between gap-3">
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold">
+          <div className="flex flex-col gap-1.5">
+            {projects.map((project) => {
+              const isSelected = project.id === selectedProjectId;
+
+              return (
+                <div
+                  key={project.id}
+                  className={cn(
+                    "group grid grid-cols-[minmax(0,1fr)_34px] items-center rounded-xl border px-2.5 py-2 transition",
+                    isSelected
+                      ? "border-primary/45 bg-primary/90 text-white shadow-[0_0_20px_rgba(255,0,255,0.22)]"
+                      : "border-white/5 bg-white/[0.035] text-white/72 hover:border-white/12 hover:bg-white/[0.075] hover:text-white",
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onProjectSelect(project.id)}
+                    className="min-w-0 text-left"
+                  >
+                    <span className="block truncate text-sm font-semibold leading-5">
                       {project.name}
                     </span>
-                    <span className="text-xs text-white/55">
-                      {project.taskCount} tasks
+                    <span className="mt-0.5 flex items-center gap-2 text-[11px] text-white/58">
+                      <span>{project.taskCount} tasks</span>
+                      <span className="size-1 rounded-full bg-white/25" />
+                      <span>{project.members.length} members</span>
                     </span>
-                  </span>
-                  <Badge variant="outline" className="shrink-0 border-white/15 text-white">
-                    {project.members.length}
-                  </Badge>
-                </span>
-              </button>
-            ))}
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <button
+                          type="button"
+                          className="grid size-8 place-items-center rounded-lg text-white/62 transition hover:bg-white/10 hover:text-white"
+                          aria-label={`${project.name} team`}
+                        />
+                      }
+                    >
+                      <ChevronDown className="size-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-[280px]">
+                      {project.members.map((member) => (
+                        <DropdownMenuItem key={member.id} className="gap-3">
+                          <Avatar className="size-7">
+                            <AvatarImage src={member.user.image ?? undefined} />
+                            <AvatarFallback>{initials(member.user)}</AvatarFallback>
+                          </Avatar>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">
+                              {member.user.name ?? member.user.email}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {member.user.email}
+                            </span>
+                          </span>
+                          <Badge variant="outline">{member.role}</Badge>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              );
+            })}
             {!projects.length ? (
               <div className="rounded-xl border border-dashed border-white/15 p-4 text-sm text-white/55">
                 No projects yet.
@@ -824,24 +919,16 @@ function TopBar({
 }
 
 function ProjectCommandHeader({
-  currentUser,
   selectedProject,
   selectedProjectRole,
   canManageProject,
-  isProjectDialogOpen,
-  setProjectDialogOpen,
-  projectMutation,
   isMemberDialogOpen,
   setMemberDialogOpen,
   memberMutation,
 }: {
-  currentUser: DashboardUser;
   selectedProject: DashboardProject | undefined;
   selectedProjectRole: "ADMIN" | "MEMBER";
   canManageProject: boolean;
-  isProjectDialogOpen: boolean;
-  setProjectDialogOpen: (open: boolean) => void;
-  projectMutation: ReturnType<typeof useMutation<{ id: string }, Error, { name: string; description?: string }>>;
   isMemberDialogOpen: boolean;
   setMemberDialogOpen: (open: boolean) => void;
   memberMutation: ReturnType<typeof useMutation<{ kind: "member" | "invitation" }, Error, { email: string; role: "ADMIN" | "MEMBER" }>>;
@@ -857,46 +944,9 @@ function ProjectCommandHeader({
             <CircleDot />
             Back to projects
           </button>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="max-w-full text-3xl font-semibold tracking-normal">
-              {selectedProject?.name ?? "Project dashboard"}
-            </h1>
-            {selectedProject ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-2 rounded-xl border border-border bg-background/55 px-3 py-2 text-sm font-medium transition hover:border-primary/35 hover:bg-primary/10"
-                    />
-                  }
-                >
-                  <Users />
-                  Team
-                  <ChevronDown />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-[300px]">
-                  {selectedProject.members.map((member) => (
-                    <DropdownMenuItem key={member.id} className="gap-3">
-                      <Avatar className="size-7">
-                        <AvatarImage src={member.user.image ?? undefined} />
-                        <AvatarFallback>{initials(member.user)}</AvatarFallback>
-                      </Avatar>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">
-                          {member.user.name ?? member.user.email}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {member.user.email}
-                        </span>
-                      </span>
-                      <Badge variant="outline">{member.role}</Badge>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
-          </div>
+          <h1 className="max-w-full text-3xl font-semibold tracking-normal">
+            {selectedProject?.name ?? "Project dashboard"}
+          </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             {selectedProject?.description ??
               "Manage team work, sync meetings, task execution, and project-level collaboration."}
@@ -922,14 +972,6 @@ function ProjectCommandHeader({
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {currentUser.role === "ADMIN" ? (
-            <ProjectDialog
-              open={isProjectDialogOpen}
-              onOpenChange={setProjectDialogOpen}
-              onSubmit={(payload) => projectMutation.mutate(payload)}
-              isPending={projectMutation.isPending}
-            />
-          ) : null}
           {selectedProject && canManageProject ? (
             <MemberDialog
               open={isMemberDialogOpen}
@@ -996,6 +1038,131 @@ function MetricCard({
   );
 }
 
+function OverviewPanel({
+  selectedProject,
+  analytics,
+  statusData,
+  notifications,
+}: {
+  selectedProject: DashboardProject | undefined;
+  analytics: DashboardAnalytics;
+  statusData: Array<{ name: string; value: number }>;
+  notifications: DashboardNotification[];
+}) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <StatusPanel statusData={statusData} />
+        <PriorityPanel analytics={analytics} />
+      </div>
+      <Card className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
+        <CardHeader>
+          <CardTitle>{selectedProject?.name ?? "Workspace"}</CardTitle>
+          <CardDescription>
+            {selectedProject?.description ??
+              "Project delivery, team ownership, and collaboration health."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm">
+          <div className="flex items-center justify-between rounded-xl border border-border bg-background/50 p-3">
+            <span className="text-muted-foreground">Active tasks</span>
+            <span className="font-semibold">{analytics.total}</span>
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-border bg-background/50 p-3">
+            <span className="text-muted-foreground">Overdue</span>
+            <span className="font-semibold text-primary">{analytics.overdue}</span>
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-border bg-background/50 p-3">
+            <span className="text-muted-foreground">Team members</span>
+            <span className="font-semibold">{selectedProject?.members.length ?? 0}</span>
+          </div>
+          <Separator />
+          <div className="grid gap-2">
+            <p className="text-sm font-semibold">Recent signals</p>
+            {notifications.slice(0, 3).map((notification) => (
+              <div
+                key={notification.id}
+                className="rounded-xl border border-border bg-background/45 p-3"
+              >
+                <p className="line-clamp-1 text-sm font-medium">
+                  {notification.title}
+                </p>
+                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                  {notification.body}
+                </p>
+              </div>
+            ))}
+            {!notifications.length ? (
+              <p className="text-sm text-muted-foreground">No recent signals yet.</p>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function TeamPanel({
+  selectedProject,
+  canManageProject,
+  isMemberDialogOpen,
+  setMemberDialogOpen,
+  memberMutation,
+}: {
+  selectedProject: DashboardProject | undefined;
+  canManageProject: boolean;
+  isMemberDialogOpen: boolean;
+  setMemberDialogOpen: (open: boolean) => void;
+  memberMutation: ReturnType<typeof useMutation<{ kind: "member" | "invitation" }, Error, { email: string; role: "ADMIN" | "MEMBER" }>>;
+}) {
+  return (
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card/45 p-4">
+        <div>
+          <h3 className="text-lg font-semibold tracking-normal">Project team</h3>
+          <p className="text-sm text-muted-foreground">
+            {selectedProject?.members.length ?? 0} people can collaborate in this project.
+          </p>
+        </div>
+        {selectedProject && canManageProject ? (
+          <MemberDialog
+            open={isMemberDialogOpen}
+            onOpenChange={setMemberDialogOpen}
+            onSubmit={(payload) => memberMutation.mutate(payload)}
+            isPending={memberMutation.isPending}
+          />
+        ) : null}
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {selectedProject?.members.map((member) => (
+          <Card
+            key={member.id}
+            className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl"
+          >
+            <CardContent className="flex items-center justify-between gap-3 p-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Avatar className="size-10">
+                  <AvatarImage src={member.user.image ?? undefined} />
+                  <AvatarFallback>{initials(member.user)}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">
+                    {member.user.name ?? member.user.email}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {member.user.email}
+                  </p>
+                </div>
+              </div>
+              <Badge variant="outline">{member.role}</Badge>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ReportsPanel({
   analytics,
   statusData,
@@ -1033,7 +1200,14 @@ function StatusPanel({
             <CartesianGrid vertical={false} />
             <XAxis dataKey="name" tickLine={false} axisLine={false} />
             <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar dataKey="value" radius={6} fill="var(--chart-1)" />
+            <Bar dataKey="value" radius={8}>
+              {statusData.map((item) => (
+                <Cell
+                  key={item.name}
+                  fill={statusColors[item.name] ?? "var(--chart-1)"}
+                />
+              ))}
+            </Bar>
           </BarChart>
         </ChartContainer>
       </CardContent>
@@ -1113,18 +1287,22 @@ function ProjectDialog({
   onOpenChange,
   onSubmit,
   isPending,
+  trigger = (
+    <Button size="sm" variant="outline">
+      <Plus data-icon="inline-start" />
+      New project
+    </Button>
+  ),
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: { name: string; description?: string }) => void;
   isPending: boolean;
+  trigger?: ReactElement | null;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger render={<Button size="sm" variant="outline" />}>
-        <Plus data-icon="inline-start" />
-        New project
-      </DialogTrigger>
+      {trigger ? <DialogTrigger render={trigger} /> : null}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create project</DialogTitle>
@@ -1188,7 +1366,7 @@ function TaskDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger render={<Button />}>
         <Plus data-icon="inline-start" />
-        Create task
+        New task
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

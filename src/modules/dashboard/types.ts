@@ -10,6 +10,14 @@ export type DashboardUser = {
   role: Role;
 };
 
+export type DashboardView =
+  | "overview"
+  | "board"
+  | "calendar"
+  | "chat"
+  | "reports"
+  | "team";
+
 export type DashboardMember = {
   id: string;
   role: Role;

@@ -7,6 +7,10 @@ Ethara Teams now has a practical automated test foundation for the modular monol
 - Unit tests with Vitest for shared domain utilities, workspace guards, and task RBAC service rules.
 - E2E tests with Playwright for anonymous access protection, credentials-authenticated dashboard access, and Admin/Member UI permission checks.
 
+For the full release QA catalog across every page, field, role, API, realtime flow,
+database-sync path, and security boundary, see
+[`docs/system-test-cases.md`](./system-test-cases.md).
+
 ## Commands
 
 ```bash
