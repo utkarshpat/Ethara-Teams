@@ -16,7 +16,8 @@ export type DashboardView =
   | "calendar"
   | "chat"
   | "reports"
-  | "team";
+  | "team"
+  | "settings";
 
 export type DashboardMember = {
   id: string;

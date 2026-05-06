@@ -132,6 +132,7 @@ const railItems: Array<{
   { label: "Chat", icon: MessageSquare, view: "chat", href: "/dashboard/chat" },
   { label: "Reports", icon: BarChart3, view: "reports", href: "/dashboard/reports" },
   { label: "Team", icon: Users, view: "team", href: "/dashboard/team" },
+  { label: "Settings", icon: Settings, view: "settings", href: "/dashboard/settings" },
 ];
 
 async function fetchJson<T>(url: string, init?: RequestInit) {
@@ -187,6 +188,7 @@ function viewLabel(view: DashboardView) {
     chat: "Project chat",
     reports: "Reports",
     team: "Team",
+    settings: "Settings",
   };
 
   return labels[view];
@@ -524,6 +526,13 @@ export function DashboardShell({
                         memberMutation={memberMutation}
                       />
                     ) : null}
+                    {activeView === "settings" ? (
+                      <SettingsPanel
+                        currentUser={currentUser}
+                        selectedProject={selectedProject}
+                        canManageProject={canManageProject}
+                      />
+                    ) : null}
                   </CardContent>
                 </Card>
               </div>
@@ -601,14 +610,6 @@ function WorkspaceRail({
           );
         })}
       </nav>
-      <button
-        type="button"
-        onClick={() => onSelect("reports")}
-        className="grid size-11 place-items-center rounded-xl bg-white/10 text-white/70 transition hover:text-white"
-        aria-label="Settings"
-      >
-        <Settings />
-      </button>
     </aside>
   );
 }
@@ -1179,6 +1180,72 @@ function ReportsPanel({
       <div className="lg:col-span-2">
         <NotificationPanel notifications={notifications} />
       </div>
+    </div>
+  );
+}
+
+function SettingsPanel({
+  currentUser,
+  selectedProject,
+  canManageProject,
+}: {
+  currentUser: DashboardUser;
+  selectedProject: DashboardProject | undefined;
+  canManageProject: boolean;
+}) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Card className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
+        <CardHeader>
+          <CardTitle>Workspace settings</CardTitle>
+          <CardDescription>
+            Operational preferences for the selected project workspace.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm">
+          <div className="flex items-center justify-between rounded-xl border border-border bg-background/45 p-3">
+            <span className="text-muted-foreground">Selected project</span>
+            <span className="font-medium">{selectedProject?.name ?? "No project"}</span>
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-border bg-background/45 p-3">
+            <span className="text-muted-foreground">Project access</span>
+            <Badge variant={canManageProject ? "default" : "outline"}>
+              {canManageProject ? "ADMIN" : "MEMBER"}
+            </Badge>
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-border bg-background/45 p-3">
+            <span className="text-muted-foreground">Team size</span>
+            <span className="font-medium">
+              {selectedProject?.members.length ?? 0} members
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
+        <CardHeader>
+          <CardTitle>Account context</CardTitle>
+          <CardDescription>
+            Current session role and identity used for RBAC checks.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm">
+          <div className="flex items-center justify-between rounded-xl border border-border bg-background/45 p-3">
+            <span className="text-muted-foreground">Signed in as</span>
+            <span className="font-medium">{currentUser.name ?? currentUser.email}</span>
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-border bg-background/45 p-3">
+            <span className="text-muted-foreground">Global role</span>
+            <Badge variant="outline">{currentUser.role}</Badge>
+          </div>
+          <div className="rounded-xl border border-border bg-background/45 p-3">
+            <p className="text-muted-foreground">Theme</p>
+            <p className="mt-1 text-sm font-medium">
+              Use the header toggle to switch between cyber-dark and light modes.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

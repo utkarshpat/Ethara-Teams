@@ -7,7 +7,14 @@ export const metadata: Metadata = {
   title: "Dashboard",
 };
 
-const allowedViews = ["tasks", "calendar", "chat", "reports", "team"] as const;
+const allowedViews = [
+  "tasks",
+  "calendar",
+  "chat",
+  "reports",
+  "team",
+  "settings",
+] as const;
 
 type DashboardViewPageProps = {
   params: Promise<{
