@@ -11,6 +11,7 @@
 - `NEXTAUTH_SECRET`
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
+- `ADMIN_EMAILS`
 
 ## Railway Setup
 1. Create a Railway project.
@@ -21,6 +22,7 @@
 6. Use Dockerfile deployment from the repository.
 7. Generate a public domain and set `NEXTAUTH_URL` to that URL.
 8. Add the production Google redirect URI: `https://your-domain/api/auth/callback/google`.
+9. Add the owner Google email to `ADMIN_EMAILS`.
 
 ## Realtime
 Realtime chat and notifications use self-hosted Socket.IO on the same Railway web service. No external realtime provider is required. The server listens on `/api/socket` and authenticates sockets with the NextAuth session cookie.
@@ -36,3 +38,9 @@ Realtime chat and notifications use self-hosted Socket.IO on the same Railway we
 ## Starter Workspace Users
 - Admin: `admin@ethara.dev` / `Password@123`
 - Member: `member@ethara.dev` / `Password@123`
+
+## Admin And Member Creation
+- The first registered credentials user becomes Admin automatically.
+- Emails in `ADMIN_EMAILS` become Admin after Google sign-in.
+- Other Google users are created as Members.
+- Admins add Members to projects from the dashboard by email after the user has signed in once.

@@ -12,6 +12,19 @@ const credentialsSchema = z.object({
   password: z.string().min(8),
 });
 
+function getAdminEmails() {
+  return new Set(
+    (process.env.ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function isConfiguredAdmin(email?: string | null) {
+  return Boolean(email && getAdminEmails().has(email.toLowerCase()));
+}
+
 const providers: NextAuthOptions["providers"] = [
   CredentialsProvider({
     name: "Credentials",
@@ -60,6 +73,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: true,
     }),
   );
 }
@@ -74,16 +88,31 @@ export const authOptions: NextAuthOptions = {
   },
   providers,
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.role = user.role;
-        token.username = user.username;
-        return token;
+    async signIn({ user, account }) {
+      if (account?.provider === "google" && user.email) {
+        const shouldPromote = isConfiguredAdmin(user.email);
+
+        if (shouldPromote) {
+          await prisma.user.updateMany({
+            where: { email: user.email.toLowerCase() },
+            data: { role: "ADMIN" },
+          });
+        }
+
+        logger.info("auth.google_success", {
+          userId: user.id,
+          configuredAdmin: shouldPromote,
+        });
       }
 
-      if (token.sub) {
+      return true;
+    },
+    async jwt({ token, user }) {
+      const userId = user?.id ?? token.sub;
+
+      if (userId) {
         const dbUser = await prisma.user.findUnique({
-          where: { id: token.sub },
+          where: { id: userId },
           select: { role: true, username: true },
         });
 
@@ -110,12 +139,12 @@ export const authOptions: NextAuthOptions = {
       logger.info("auth.user_created", { userId: user.id });
       const userCount = await prisma.user.count();
 
-      if (userCount === 1) {
+      if (userCount === 1 || isConfiguredAdmin(user.email)) {
         await prisma.user.update({
           where: { id: user.id },
           data: { role: "ADMIN" },
         });
-        logger.info("auth.first_user_promoted", { userId: user.id });
+        logger.info("auth.user_promoted", { userId: user.id });
       }
     },
   },
