@@ -111,115 +111,119 @@ export function KanbanBoard({
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="grid min-h-[620px] gap-4 xl:grid-cols-4">
-        {columns.map((column) => {
-          const columnTasks = tasks
-            .filter((task) => task.status === column.id)
-            .sort((a, b) => a.order - b.order);
+      <div className="overflow-x-auto pb-2">
+        <div className="grid min-h-[620px] min-w-[1080px] grid-cols-4 gap-4">
+          {columns.map((column) => {
+            const columnTasks = tasks
+              .filter((task) => task.status === column.id)
+              .sort((a, b) => a.order - b.order);
 
-          return (
-            <Droppable droppableId={column.id} key={column.id}>
-              {(provided, snapshot) => (
-                <section
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  className={cn(
-                    "flex min-h-[340px] flex-col gap-3 rounded-2xl border border-border border-t-[3px] bg-card/20 backdrop-blur-md p-4 transition-all",
-                    column.accent,
-                    snapshot.isDraggingOver && "ring-2 ring-primary/40 bg-primary/5",
-                  )}
-                >
-                  <div className="flex items-center justify-between px-1">
-                    <h2 className="text-sm font-semibold tracking-normal">
-                      {column.title}
-                    </h2>
-                    <Badge variant="secondary">{columnTasks.length}</Badge>
-                  </div>
-                  <div className="flex flex-1 flex-col gap-3">
-                    {columnTasks.map((task, index) => {
-                      const canMove = canMoveTask(task);
+            return (
+              <Droppable droppableId={column.id} key={column.id}>
+                {(provided, snapshot) => (
+                  <section
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className={cn(
+                      "flex min-h-[340px] flex-col gap-3 rounded-2xl border border-border border-t-[3px] bg-card/20 p-4 backdrop-blur-md transition-all",
+                      column.accent,
+                      snapshot.isDraggingOver && "bg-primary/5 ring-2 ring-primary/40",
+                    )}
+                  >
+                    <div className="flex items-center justify-between px-1">
+                      <h2 className="text-sm font-semibold tracking-normal">
+                        {column.title}
+                      </h2>
+                      <Badge variant="secondary">{columnTasks.length}</Badge>
+                    </div>
+                    <div className="flex flex-1 flex-col gap-3">
+                      {columnTasks.map((task, index) => {
+                        const canMove = canMoveTask(task);
 
-                      return (
-                        <Draggable
-                          draggableId={task.id}
-                          index={index}
-                          isDragDisabled={!canMove}
-                          key={task.id}
-                        >
-                          {(dragProvided, dragSnapshot) => (
-                            <Card
-                              ref={dragProvided.innerRef}
-                              {...dragProvided.draggableProps}
-                              {...dragProvided.dragHandleProps}
-                              className={cn(
-                                "rounded-xl border border-border bg-card shadow-sm transition-all hover:border-primary/30 hover:shadow-md",
-                                dragSnapshot.isDragging && "rotate-2 scale-105 shadow-xl border-primary/50",
-                                !canMove && "opacity-80 bg-muted/50",
-                              )}
-                            >
-                              <CardContent className="flex flex-col gap-4 p-4">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <h3 className="line-clamp-2 text-sm font-semibold tracking-normal">
-                                      {task.title}
-                                    </h3>
-                                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                        return (
+                          <Draggable
+                            draggableId={task.id}
+                            index={index}
+                            isDragDisabled={!canMove}
+                            key={task.id}
+                          >
+                            {(dragProvided, dragSnapshot) => (
+                              <Card
+                                ref={dragProvided.innerRef}
+                                {...dragProvided.draggableProps}
+                                {...dragProvided.dragHandleProps}
+                                className={cn(
+                                  "rounded-xl border border-border bg-card shadow-sm transition-all hover:border-primary/30 hover:shadow-md",
+                                  dragSnapshot.isDragging &&
+                                    "rotate-2 scale-105 border-primary/50 shadow-xl",
+                                  !canMove && "bg-muted/50 opacity-80",
+                                )}
+                              >
+                                <CardContent className="flex flex-col gap-4 p-4">
+                                  <div className="flex flex-col gap-2">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <h3 className="line-clamp-2 min-w-0 text-sm font-semibold leading-5 tracking-normal">
+                                        {task.title}
+                                      </h3>
+                                      <Badge
+                                        variant={priorityVariant(task.priority)}
+                                        className="shrink-0"
+                                      >
+                                        {task.priority}
+                                      </Badge>
+                                    </div>
+                                    <p className="line-clamp-3 text-xs leading-5 text-muted-foreground">
                                       {task.description ?? "No description"}
                                     </p>
-                                  </div>
-                                  <div className="flex shrink-0 flex-col items-end gap-2">
-                                    <Badge variant={priorityVariant(task.priority)}>
-                                      {task.priority}
-                                    </Badge>
                                     {!canMove ? (
-                                      <Badge variant="outline" className="gap-1">
+                                      <Badge variant="outline" className="w-fit gap-1">
                                         <LockKeyhole />
                                         Read only
                                       </Badge>
                                     ) : null}
                                   </div>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                  {task.dueDate ? (
+                                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                    {task.dueDate ? (
+                                      <span className="inline-flex items-center gap-1">
+                                        <CalendarClock />
+                                        {new Intl.DateTimeFormat("en", {
+                                          month: "short",
+                                          day: "numeric",
+                                        }).format(new Date(task.dueDate))}
+                                      </span>
+                                    ) : null}
                                     <span className="inline-flex items-center gap-1">
-                                      <CalendarClock />
-                                      {new Intl.DateTimeFormat("en", {
-                                        month: "short",
-                                        day: "numeric",
-                                      }).format(new Date(task.dueDate))}
+                                      <MessageSquare />
+                                      {task.commentsCount}
                                     </span>
-                                  ) : null}
-                                  <span className="inline-flex items-center gap-1">
-                                    <MessageSquare />
-                                    {task.commentsCount}
-                                  </span>
-                                </div>
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="truncate text-xs text-muted-foreground">
-                                    {task.assignedTo?.name ?? "Unassigned"}
                                   </div>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setSelectedTaskId(task.id)}
-                                  >
-                                    Open
-                                  </Button>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          )}
-                        </Draggable>
-                      );
-                    })}
-                    {provided.placeholder}
-                  </div>
-                </section>
-              )}
-            </Droppable>
-          );
-        })}
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0 truncate text-xs text-muted-foreground">
+                                      {task.assignedTo?.name ?? "Unassigned"}
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setSelectedTaskId(task.id)}
+                                    >
+                                      Open
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+                          </Draggable>
+                        );
+                      })}
+                      {provided.placeholder}
+                    </div>
+                  </section>
+                )}
+              </Droppable>
+            );
+          })}
+        </div>
       </div>
     </DragDropContext>
   );

@@ -20,6 +20,7 @@ import {
   Timer,
   Users,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -112,13 +113,17 @@ const priorityColors = {
 const selectClassName =
   "h-9 w-full rounded-lg border border-input bg-input px-3 text-sm text-foreground outline-none transition focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/35";
 
-const railItems = [
-  { label: "Home", icon: LayoutDashboard },
-  { label: "Tasks", icon: ListTodo },
-  { label: "Calendar", icon: CalendarDays },
-  { label: "Chat", icon: MessageSquare },
-  { label: "Reports", icon: BarChart3 },
-  { label: "Team", icon: Users },
+const railItems: Array<{
+  label: string;
+  icon: LucideIcon;
+  view: DashboardView | "team";
+}> = [
+  { label: "Home", icon: LayoutDashboard, view: "board" },
+  { label: "Tasks", icon: ListTodo, view: "board" },
+  { label: "Calendar", icon: CalendarDays, view: "calendar" },
+  { label: "Chat", icon: MessageSquare, view: "chat" },
+  { label: "Reports", icon: BarChart3, view: "reports" },
+  { label: "Team", icon: Users, view: "team" },
 ];
 
 const workViews: Array<{ id: DashboardView; label: string }> = [
@@ -371,7 +376,18 @@ export function DashboardShell({
   return (
     <main className="min-h-screen p-3 text-foreground lg:p-4">
       <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] w-full max-w-[1760px] overflow-hidden rounded-2xl border border-white/10 bg-[#070d22]/85 shadow-2xl shadow-black/30 backdrop-blur-2xl">
-        <WorkspaceRail unreadCount={unreadCount} />
+        <WorkspaceRail
+          activeView={activeView}
+          unreadCount={unreadCount}
+          onSelect={(view) => {
+            if (view === "team") {
+              setMemberDialogOpen(true);
+              return;
+            }
+
+            setActiveView(view);
+          }}
+        />
         <WorkspaceSidebar
           currentUser={currentUser}
           projects={projectsQuery.data}
@@ -486,15 +502,11 @@ export function DashboardShell({
             <aside className="hidden min-h-0 border-l border-border/70 bg-card/30 xl:block">
               <ScrollArea className="h-full">
                 <div className="flex flex-col gap-4 p-4">
-                  {activeView === "calendar" ? (
-                    <ProjectChat
-                      projectId={selectedProjectId}
-                      members={selectedProject?.members ?? []}
-                      tasks={boardTasks}
-                    />
-                  ) : (
-                    <CalendarPanel />
-                  )}
+                  <ProjectChat
+                    projectId={selectedProjectId}
+                    members={selectedProject?.members ?? []}
+                    tasks={boardTasks}
+                  />
                   <StatusPanel statusData={statusData} />
                   <NotificationPanel notifications={notificationsQuery.data} />
                 </div>
@@ -514,24 +526,41 @@ export function DashboardShell({
   );
 }
 
-function WorkspaceRail({ unreadCount }: { unreadCount: number }) {
+function WorkspaceRail({
+  activeView,
+  unreadCount,
+  onSelect,
+}: {
+  activeView: DashboardView;
+  unreadCount: number;
+  onSelect: (view: DashboardView | "team") => void;
+}) {
   return (
     <aside className="hidden w-[68px] shrink-0 flex-col items-center gap-4 border-r border-white/10 bg-[#17082e]/90 px-3 py-4 text-white lg:flex">
       <div className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-primary to-[#7e22ce] text-sm font-bold shadow-[0_0_28px_rgba(255,0,255,0.35)]">
         ET
       </div>
       <nav className="flex flex-1 flex-col items-center gap-2 pt-2">
-        {railItems.map((item, index) => {
+        {railItems.map((item) => {
           const Icon = item.icon;
+          const isActive =
+            item.label === "Tasks"
+              ? activeView === "board"
+              : item.view !== "team" &&
+                item.label !== "Home" &&
+                item.view === activeView;
+
           return (
             <button
               key={item.label}
               type="button"
+              onClick={() => onSelect(item.view)}
               className={cn(
                 "relative grid size-11 place-items-center rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white",
-                index === 0 && "bg-white/12 text-white",
+                isActive && "bg-white/12 text-white shadow-inner",
               )}
               aria-label={item.label}
+              aria-pressed={isActive}
             >
               <Icon />
               {item.label === "Chat" && unreadCount ? (
@@ -545,6 +574,7 @@ function WorkspaceRail({ unreadCount }: { unreadCount: number }) {
       </nav>
       <button
         type="button"
+        onClick={() => onSelect("reports")}
         className="grid size-11 place-items-center rounded-xl bg-white/10 text-white/70 transition hover:text-white"
         aria-label="Settings"
       >
@@ -583,15 +613,46 @@ function WorkspaceSidebar({
 }) {
   return (
     <aside className="hidden w-[292px] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-[#32105d]/88 via-[#241044]/88 to-[#130a28]/90 text-white xl:flex">
-      <div className="flex items-center justify-between gap-3 px-5 py-5">
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-[0.22em] text-white/45">Workspace</p>
-          <h2 className="mt-1 truncate text-2xl font-semibold tracking-normal">
-            Ethara Teams
-          </h2>
-        </div>
-        <ChevronDown className="shrink-0 text-white/60" />
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              className="flex items-center justify-between gap-3 px-5 py-5 text-left transition hover:bg-white/[0.04]"
+            />
+          }
+        >
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-[0.22em] text-white/45">
+              Workspace
+            </p>
+            <h2 className="mt-1 truncate text-2xl font-semibold tracking-normal">
+              Ethara Teams
+            </h2>
+          </div>
+          <ChevronDown className="shrink-0 text-white/60" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-[260px]">
+          {projects.map((project) => (
+            <DropdownMenuItem
+              key={project.id}
+              onClick={() => onProjectSelect(project.id)}
+              className="cursor-pointer"
+            >
+              <span className="truncate">{project.name}</span>
+              {project.id === selectedProjectId ? (
+                <Badge variant="outline" className="ml-auto">
+                  Active
+                </Badge>
+              ) : null}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
+            <LogOut />
+            Log out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <ScrollArea className="flex-1 px-4">
         <div className="flex flex-col gap-6 pb-5">
@@ -796,9 +857,46 @@ function ProjectCommandHeader({
             <CircleDot />
             Back to projects
           </button>
-          <h1 className="truncate text-3xl font-semibold tracking-normal">
-            {selectedProject?.name ?? "Project dashboard"}
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="max-w-full text-3xl font-semibold tracking-normal">
+              {selectedProject?.name ?? "Project dashboard"}
+            </h1>
+            {selectedProject ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-2 rounded-xl border border-border bg-background/55 px-3 py-2 text-sm font-medium transition hover:border-primary/35 hover:bg-primary/10"
+                    />
+                  }
+                >
+                  <Users />
+                  Team
+                  <ChevronDown />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[300px]">
+                  {selectedProject.members.map((member) => (
+                    <DropdownMenuItem key={member.id} className="gap-3">
+                      <Avatar className="size-7">
+                        <AvatarImage src={member.user.image ?? undefined} />
+                        <AvatarFallback>{initials(member.user)}</AvatarFallback>
+                      </Avatar>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {member.user.name ?? member.user.email}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {member.user.email}
+                        </span>
+                      </span>
+                      <Badge variant="outline">{member.role}</Badge>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </div>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             {selectedProject?.description ??
               "Manage team work, sync meetings, task execution, and project-level collaboration."}
