@@ -124,9 +124,9 @@ export function KanbanBoard({
                   ref={provided.innerRef}
                   {...provided.droppableProps}
                   className={cn(
-                    "glass-panel flex min-h-[340px] flex-col gap-3 rounded-lg border-t-2 bg-transparent p-3 transition",
+                    "flex min-h-[340px] flex-col gap-3 rounded-2xl border border-border border-t-[3px] bg-card/20 backdrop-blur-md p-4 transition-all",
                     column.accent,
-                    snapshot.isDraggingOver && "ring-2 ring-primary/40",
+                    snapshot.isDraggingOver && "ring-2 ring-primary/40 bg-primary/5",
                   )}
                 >
                   <div className="flex items-center justify-between px-1">
@@ -152,9 +152,9 @@ export function KanbanBoard({
                               {...dragProvided.draggableProps}
                               {...dragProvided.dragHandleProps}
                               className={cn(
-                                "rounded-md border-white/10 bg-[#111827b3] shadow-xl shadow-black/20 transition",
-                                dragSnapshot.isDragging && "rotate-1 shadow-xl",
-                                !canMove && "bg-[#11182780]",
+                                "rounded-xl border border-border bg-card shadow-sm transition-all hover:border-primary/30 hover:shadow-md",
+                                dragSnapshot.isDragging && "rotate-2 scale-105 shadow-xl border-primary/50",
+                                !canMove && "opacity-80 bg-muted/50",
                               )}
                             >
                               <CardContent className="flex flex-col gap-4 p-4">

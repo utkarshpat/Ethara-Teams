@@ -110,7 +110,7 @@ function eventTone(type: CalendarEventType) {
     return "border-cyan-400/30 bg-cyan-400/10";
   }
 
-  return "border-white/10 bg-[#11182766]";
+  return "border-border bg-muted/50";
 }
 
 export function CalendarPanel() {
@@ -180,7 +180,7 @@ export function CalendarPanel() {
   });
 
   return (
-    <Card className="glass-panel rounded-lg">
+    <Card className="rounded-2xl border border-border bg-card/40 backdrop-blur-xl shadow-sm">
       <CardHeader className="flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -211,7 +211,7 @@ export function CalendarPanel() {
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="grid gap-3 rounded-lg border border-white/10 bg-[#11182766] p-3">
+        <div className="grid gap-3 rounded-xl border border-border bg-muted/40 p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium">Upcoming today</p>
             <Badge variant="outline">{events.length} events</Badge>
@@ -235,14 +235,14 @@ export function CalendarPanel() {
           )}
         </div>
 
-        <ScrollArea className="h-[520px] rounded-lg border border-white/10">
-          <div className="divide-y divide-white/10">
+        <ScrollArea className="h-[520px] rounded-xl border border-border bg-card/20 shadow-inner">
+          <div className="divide-y divide-border/50">
             {Array.from({ length: 24 }, (_, hour) => {
               const items = hourEvents(events, hour);
 
               return (
                 <div key={hour} className="grid min-h-20 grid-cols-[64px_1fr]">
-                  <div className="border-r border-white/10 px-3 py-3 text-xs text-muted-foreground">
+                  <div className="border-r border-border/50 px-3 py-3 text-xs text-muted-foreground">
                     {String(hour).padStart(2, "0")}:00
                   </div>
                   <div className="flex flex-col gap-2 p-2">
@@ -261,7 +261,7 @@ export function CalendarPanel() {
                             <Badge variant="outline">{event.type}</Badge>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {timeLabel(event.startAt)} - {timeLabel(event.endAt)} · {eventDuration(event)} min
+                            {timeLabel(event.startAt)} - {timeLabel(event.endAt)} / {eventDuration(event)} min
                           </p>
                           {event.location ? (
                             <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
@@ -297,7 +297,7 @@ function CalendarEventRow({
   onDelete: () => void;
 }) {
   return (
-    <div className="rounded-md border border-white/10 bg-background/40 p-3">
+    <div className="rounded-xl border border-border bg-card shadow-sm p-4 transition-all hover:shadow-md hover:border-primary/30">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{event.title}</p>

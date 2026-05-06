@@ -4,12 +4,19 @@ import type { Priority, TaskStatus } from "@prisma/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
+  BarChart3,
   Bell,
+  CalendarDays,
   CheckCircle2,
-  type LucideIcon,
-  LogOut,
+  ChevronDown,
+  CircleDot,
+  LayoutDashboard,
   ListTodo,
+  LogOut,
+  MessageSquare,
   Plus,
+  Search,
+  Settings,
   Timer,
   Users,
 } from "lucide-react";
@@ -57,15 +64,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Field,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useProjectRealtime } from "@/hooks/use-realtime";
+import { cn } from "@/lib/utils";
 import { CalendarPanel } from "@/modules/dashboard/components/calendar-panel";
 import { KanbanBoard } from "@/modules/dashboard/components/kanban-board";
 import { ProjectChat } from "@/modules/dashboard/components/project-chat";
@@ -88,6 +93,8 @@ type DashboardShellProps = {
   initialProjectId: string | null;
 };
 
+type DashboardView = "board" | "calendar" | "chat" | "reports";
+
 const chartConfig = {
   value: {
     label: "Tasks",
@@ -104,6 +111,22 @@ const priorityColors = {
 
 const selectClassName =
   "h-9 w-full rounded-lg border border-input bg-input px-3 text-sm text-foreground outline-none transition focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/35";
+
+const railItems = [
+  { label: "Home", icon: LayoutDashboard },
+  { label: "Tasks", icon: ListTodo },
+  { label: "Calendar", icon: CalendarDays },
+  { label: "Chat", icon: MessageSquare },
+  { label: "Reports", icon: BarChart3 },
+  { label: "Team", icon: Users },
+];
+
+const workViews: Array<{ id: DashboardView; label: string }> = [
+  { id: "board", label: "Active sprint" },
+  { id: "calendar", label: "Calendar" },
+  { id: "chat", label: "Project chat" },
+  { id: "reports", label: "Reports" },
+];
 
 async function fetchJson<T>(url: string, init?: RequestInit) {
   const response = await fetch(url, init);
@@ -130,6 +153,14 @@ function toDateTimeInput(date: string) {
   return new Date(date).toISOString().slice(0, 16);
 }
 
+function todayLabel() {
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date());
+}
+
 export function DashboardShell({
   currentUser,
   initialProjects,
@@ -142,12 +173,14 @@ export function DashboardShell({
   const queryClient = useQueryClient();
   const selectedTaskId = useUiStore((state) => state.selectedTaskId);
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId);
+  const [activeView, setActiveView] = useState<DashboardView>("board");
   const [optimisticTasks, setOptimisticTasks] = useState<DashboardTask[] | null>(
     null,
   );
   const [isProjectDialogOpen, setProjectDialogOpen] = useState(false);
   const [isTaskDialogOpen, setTaskDialogOpen] = useState(false);
   const [isMemberDialogOpen, setMemberDialogOpen] = useState(false);
+
   useProjectRealtime(selectedProjectId, {
     "task:created": () => refreshProjectData(),
     "task:updated": () => refreshProjectData(),
@@ -206,14 +239,27 @@ export function DashboardShell({
     currentUser.role === "ADMIN" || selectedMembership?.role === "ADMIN"
       ? "ADMIN"
       : "MEMBER";
-  const canManageProject = Boolean(selectedProject) && selectedProjectRole === "ADMIN";
+  const canManageProject =
+    Boolean(selectedProject) && selectedProjectRole === "ADMIN";
   const roleLabel = selectedProject
     ? `Project ${selectedProjectRole}`
     : currentUser.role;
 
   const boardTasks = optimisticTasks ?? tasksQuery.data;
-  const selectedTask = boardTasks.find((task) => task.id === selectedTaskId) ?? null;
+  const selectedTask =
+    boardTasks.find((task) => task.id === selectedTaskId) ?? null;
   const unreadCount = notificationsQuery.data.filter((item) => !item.read).length;
+  const analytics = analyticsQuery.data;
+
+  const statusData = useMemo(
+    () =>
+      ["TODO", "IN_PROGRESS", "REVIEW", "DONE"].map((status) => ({
+        name: status.replace("_", " "),
+        value:
+          analytics.status.find((item) => item.name === status)?.value ?? 0,
+      })),
+    [analytics.status],
+  );
 
   function refreshProjectData() {
     if (!selectedProjectId) {
@@ -312,17 +358,6 @@ export function DashboardShell({
     },
   });
 
-  const analytics = analyticsQuery.data;
-  const statusData = useMemo(
-    () =>
-      ["TODO", "IN_PROGRESS", "REVIEW", "DONE"].map((status) => ({
-        name: status.replace("_", " "),
-        value:
-          analytics.status.find((item) => item.name === status)?.value ?? 0,
-      })),
-    [analytics.status],
-  );
-
   function handleProjectSelect(projectId: string) {
     setOptimisticTasks(null);
     setSelectedProjectId(projectId);
@@ -334,66 +369,236 @@ export function DashboardShell({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-5 px-4 py-4 lg:px-6">
-      <header className="glass-panel flex flex-col gap-4 rounded-lg px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-4">
-          <div className="grid size-11 place-items-center rounded-md bg-primary text-sm font-semibold text-primary-foreground shadow-[0_0_20px_rgba(255,0,255,0.35)]">
-            ET
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Ethara Teams</p>
-            <h1 className="text-2xl font-semibold tracking-normal">
-              {selectedProject?.name ?? "Project dashboard"}
-            </h1>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <ThemeToggle />
-          <div className="flex items-center gap-2 rounded-md border border-white/10 bg-[#11182766] px-3 py-2 backdrop-blur-xl">
-            <span className="grid size-7 place-items-center rounded-md bg-primary/15 text-primary">
-              <Bell />
-            </span>
-            <span className="mono-meta text-sm font-semibold">{unreadCount}</span>
-            <span className="text-xs text-muted-foreground">unread</span>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <button
-                  type="button"
-                  className="group flex items-center gap-2 rounded-md border border-white/10 bg-[#11182766] px-3 py-2 text-left backdrop-blur-xl transition-all hover:border-white/20 hover:bg-white/10 hover:shadow-lg"
+    <main className="min-h-screen p-3 text-foreground lg:p-4">
+      <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] w-full max-w-[1760px] overflow-hidden rounded-2xl border border-white/10 bg-[#070d22]/85 shadow-2xl shadow-black/30 backdrop-blur-2xl">
+        <WorkspaceRail unreadCount={unreadCount} />
+        <WorkspaceSidebar
+          currentUser={currentUser}
+          projects={projectsQuery.data}
+          selectedProjectId={selectedProjectId}
+          selectedProject={selectedProject}
+          canManageProject={canManageProject}
+          isProjectDialogOpen={isProjectDialogOpen}
+          setProjectDialogOpen={setProjectDialogOpen}
+          projectMutation={projectMutation}
+          isMemberDialogOpen={isMemberDialogOpen}
+          setMemberDialogOpen={setMemberDialogOpen}
+          memberMutation={memberMutation}
+          onProjectSelect={handleProjectSelect}
+        />
+
+        <section className="flex min-w-0 flex-1 flex-col bg-background/70">
+          <TopBar
+            currentUser={currentUser}
+            roleLabel={roleLabel}
+            unreadCount={unreadCount}
+          />
+
+          <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <ScrollArea className="min-h-0">
+              <div className="flex min-w-0 flex-col gap-5 p-4 lg:p-5">
+                <ProjectCommandHeader
+                  currentUser={currentUser}
+                  selectedProject={selectedProject}
+                  selectedProjectRole={selectedProjectRole}
+                  canManageProject={canManageProject}
+                  isProjectDialogOpen={isProjectDialogOpen}
+                  setProjectDialogOpen={setProjectDialogOpen}
+                  projectMutation={projectMutation}
+                  isMemberDialogOpen={isMemberDialogOpen}
+                  setMemberDialogOpen={setMemberDialogOpen}
+                  memberMutation={memberMutation}
                 />
-              }
-            >
-                <Avatar className="size-8 transition-transform group-hover:scale-105">
-                  <AvatarImage src={currentUser.image ?? undefined} />
-                  <AvatarFallback>{initials(currentUser)}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {currentUser.name ?? currentUser.email}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{roleLabel}</p>
+
+                <MetricStrip analytics={analytics} />
+
+                <Card className="overflow-hidden rounded-2xl border border-border bg-card/50 shadow-sm backdrop-blur-xl">
+                  <CardHeader className="border-b border-border/70 px-4 py-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0">
+                        <CardTitle className="truncate">
+                          {selectedProject?.name ?? "Execution workspace"}
+                        </CardTitle>
+                        <CardDescription>
+                          {canManageProject
+                            ? "Plan, assign, sync, and monitor delivery from one command surface."
+                            : "Track assigned work, calendar commitments, and project collaboration."}
+                        </CardDescription>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {workViews.map((view) => (
+                          <Button
+                            key={view.id}
+                            type="button"
+                            size="sm"
+                            variant={activeView === view.id ? "default" : "outline"}
+                            onClick={() => setActiveView(view.id)}
+                          >
+                            {view.label}
+                          </Button>
+                        ))}
+                        {selectedProject && canManageProject ? (
+                          <TaskDialog
+                            open={isTaskDialogOpen}
+                            onOpenChange={setTaskDialogOpen}
+                            members={selectedProject.members}
+                            onSubmit={(payload) => taskMutation.mutate(payload)}
+                            isPending={taskMutation.isPending}
+                          />
+                        ) : null}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    {activeView === "board" ? (
+                      <KanbanBoard
+                        tasks={boardTasks}
+                        onReorder={setOptimisticTasks}
+                        canMoveTask={canMoveTask}
+                        onDeniedMove={() =>
+                          toast.info("Members can only move tasks assigned to them")
+                        }
+                        onMove={(taskId, status, order) =>
+                          moveMutation.mutate({ taskId, status, order })
+                        }
+                      />
+                    ) : null}
+                    {activeView === "calendar" ? <CalendarPanel /> : null}
+                    {activeView === "chat" ? (
+                      <ProjectChat
+                        projectId={selectedProjectId}
+                        members={selectedProject?.members ?? []}
+                        tasks={boardTasks}
+                      />
+                    ) : null}
+                    {activeView === "reports" ? (
+                      <ReportsPanel
+                        analytics={analytics}
+                        statusData={statusData}
+                        notifications={notificationsQuery.data}
+                      />
+                    ) : null}
+                  </CardContent>
+                </Card>
+              </div>
+            </ScrollArea>
+
+            <aside className="hidden min-h-0 border-l border-border/70 bg-card/30 xl:block">
+              <ScrollArea className="h-full">
+                <div className="flex flex-col gap-4 p-4">
+                  {activeView === "calendar" ? (
+                    <ProjectChat
+                      projectId={selectedProjectId}
+                      members={selectedProject?.members ?? []}
+                      tasks={boardTasks}
+                    />
+                  ) : (
+                    <CalendarPanel />
+                  )}
+                  <StatusPanel statusData={statusData} />
+                  <NotificationPanel notifications={notificationsQuery.data} />
                 </div>
-              
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[200px]">
-              <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive">
-                <LogOut className="mr-2 size-4" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </ScrollArea>
+            </aside>
+          </div>
+        </section>
+      </div>
+
+      <TaskSheet
+        task={selectedTask}
+        members={selectedProject?.members ?? []}
+        tasks={boardTasks}
+        canManageProject={canManageProject}
+      />
+    </main>
+  );
+}
+
+function WorkspaceRail({ unreadCount }: { unreadCount: number }) {
+  return (
+    <aside className="hidden w-[68px] shrink-0 flex-col items-center gap-4 border-r border-white/10 bg-[#17082e]/90 px-3 py-4 text-white lg:flex">
+      <div className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-primary to-[#7e22ce] text-sm font-bold shadow-[0_0_28px_rgba(255,0,255,0.35)]">
+        ET
+      </div>
+      <nav className="flex flex-1 flex-col items-center gap-2 pt-2">
+        {railItems.map((item, index) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.label}
+              type="button"
+              className={cn(
+                "relative grid size-11 place-items-center rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white",
+                index === 0 && "bg-white/12 text-white",
+              )}
+              aria-label={item.label}
+            >
+              <Icon />
+              {item.label === "Chat" && unreadCount ? (
+                <span className="absolute right-1 top-1 grid size-4 place-items-center rounded-full bg-primary text-[10px] font-semibold text-white">
+                  {Math.min(unreadCount, 9)}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </nav>
+      <button
+        type="button"
+        className="grid size-11 place-items-center rounded-xl bg-white/10 text-white/70 transition hover:text-white"
+        aria-label="Settings"
+      >
+        <Settings />
+      </button>
+    </aside>
+  );
+}
+
+function WorkspaceSidebar({
+  currentUser,
+  projects,
+  selectedProjectId,
+  selectedProject,
+  canManageProject,
+  isProjectDialogOpen,
+  setProjectDialogOpen,
+  projectMutation,
+  isMemberDialogOpen,
+  setMemberDialogOpen,
+  memberMutation,
+  onProjectSelect,
+}: {
+  currentUser: DashboardUser;
+  projects: DashboardProject[];
+  selectedProjectId: string | null;
+  selectedProject: DashboardProject | undefined;
+  canManageProject: boolean;
+  isProjectDialogOpen: boolean;
+  setProjectDialogOpen: (open: boolean) => void;
+  projectMutation: ReturnType<typeof useMutation<{ id: string }, Error, { name: string; description?: string }>>;
+  isMemberDialogOpen: boolean;
+  setMemberDialogOpen: (open: boolean) => void;
+  memberMutation: ReturnType<typeof useMutation<{ kind: "member" | "invitation" }, Error, { email: string; role: "ADMIN" | "MEMBER" }>>;
+  onProjectSelect: (projectId: string) => void;
+}) {
+  return (
+    <aside className="hidden w-[292px] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-[#32105d]/88 via-[#241044]/88 to-[#130a28]/90 text-white xl:flex">
+      <div className="flex items-center justify-between gap-3 px-5 py-5">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-[0.22em] text-white/45">Workspace</p>
+          <h2 className="mt-1 truncate text-2xl font-semibold tracking-normal">
+            Ethara Teams
+          </h2>
         </div>
-      </header>
-      <div className="grid flex-1 items-start gap-5 lg:grid-cols-[260px_1fr] xl:grid-cols-[280px_1fr]">
-        <aside className="glass-panel sticky top-6 flex flex-col gap-6 rounded-lg p-5">
+        <ChevronDown className="shrink-0 text-white/60" />
+      </div>
+
+      <ScrollArea className="flex-1 px-4">
+        <div className="flex flex-col gap-6 pb-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-semibold tracking-normal">Projects</h2>
-              <p className="text-xs text-muted-foreground">
-                {projectsQuery.data.length} active
-              </p>
+              <p className="text-sm font-semibold">Projects</p>
+              <p className="text-xs text-white/50">{projects.length} active</p>
             </div>
             {currentUser.role === "ADMIN" ? (
               <ProjectDialog
@@ -404,48 +609,50 @@ export function DashboardShell({
               />
             ) : null}
           </div>
-          <div className="flex flex-col gap-2">
-            {projectsQuery.data.map((project) => (
+
+          <div className="flex flex-col gap-1">
+            {projects.map((project) => (
               <button
                 key={project.id}
                 type="button"
-                onClick={() => handleProjectSelect(project.id)}
-                className={`rounded-md border px-3 py-3 text-left transition ${
+                onClick={() => onProjectSelect(project.id)}
+                className={cn(
+                  "group rounded-xl px-3 py-3 text-left transition",
                   project.id === selectedProjectId
-                    ? "border-primary/70 bg-primary/10 text-foreground shadow-[0_0_20px_rgba(255,0,255,0.18)]"
-                    : "border-white/10 bg-[#11182766] hover:border-primary/35 hover:bg-primary/10"
-                }`}
+                    ? "bg-primary/95 text-white shadow-[0_0_24px_rgba(255,0,255,0.24)]"
+                    : "text-white/72 hover:bg-white/10 hover:text-white",
+                )}
               >
-                <span className="grid gap-2">
-                  <span className="block truncate text-sm font-medium">
-                    {project.name}
-                  </span>
-                  <span className="flex items-center justify-between gap-3">
-                    <span className="text-xs text-muted-foreground">
+                <span className="flex items-center justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold">
+                      {project.name}
+                    </span>
+                    <span className="text-xs text-white/55">
                       {project.taskCount} tasks
                     </span>
-                    <Badge variant="outline" className="mono-meta shrink-0">
-                      {project.members.length} members
-                    </Badge>
                   </span>
+                  <Badge variant="outline" className="shrink-0 border-white/15 text-white">
+                    {project.members.length}
+                  </Badge>
                 </span>
               </button>
             ))}
-            {!projectsQuery.data.length ? (
-              <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                No projects yet. Admin users can create the first workspace.
+            {!projects.length ? (
+              <div className="rounded-xl border border-dashed border-white/15 p-4 text-sm text-white/55">
+                No projects yet.
               </div>
             ) : null}
           </div>
-          <Separator />
+
+          <Separator className="bg-white/10" />
+
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold tracking-normal">Team</h2>
-                <p className="text-xs text-muted-foreground">
-                  {canManageProject
-                    ? "Add members to assign project work"
-                    : "Members assigned to this project"}
+                <p className="text-sm font-semibold">Team</p>
+                <p className="text-xs text-white/50">
+                  {selectedProject?.members.length ?? 0} people
                 </p>
               </div>
               {selectedProject && canManageProject ? (
@@ -461,168 +668,207 @@ export function DashboardShell({
               {selectedProject?.members.map((member) => (
                 <div
                   key={member.id}
-                  className="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-[#11182766] px-3 py-2"
+                  className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.06] px-3 py-2"
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     <Avatar className="size-7">
                       <AvatarImage src={member.user.image ?? undefined} />
                       <AvatarFallback>{initials(member.user)}</AvatarFallback>
                     </Avatar>
-                    <span className="truncate text-sm">
+                    <span className="truncate text-sm text-white/86">
                       {member.user.name ?? member.user.email}
                     </span>
                   </div>
-                  <Badge variant="outline">{member.role}</Badge>
+                  <span className="text-[10px] font-semibold text-white/50">
+                    {member.role}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
-        </aside>
-        <section className="flex min-w-0 flex-col gap-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard title="Total tasks" value={analytics.total} icon={ListTodo} />
-            <MetricCard title="Overdue" value={analytics.overdue} icon={AlertCircle} />
-            <MetricCard
-              title="Done"
-              value={
-                analytics.status.find((item) => item.name === "DONE")?.value ?? 0
-              }
-              icon={CheckCircle2}
-            />
-            <MetricCard
-              title="In progress"
-              value={
-                analytics.status.find((item) => item.name === "IN_PROGRESS")
-                  ?.value ?? 0
-              }
-              icon={Timer}
-            />
-          </div>
+        </div>
+      </ScrollArea>
 
-          <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
-            <Card className="glass-panel rounded-lg">
-              <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <CardTitle>Execution board</CardTitle>
-                  <CardDescription>
-                    {canManageProject
-                      ? "Create tasks, assign members, and drag work across stages."
-                      : "Drag your assigned tasks across stages for progress updates."}
-                  </CardDescription>
-                </div>
-                {selectedProject && canManageProject ? (
-                  <TaskDialog
-                    open={isTaskDialogOpen}
-                    onOpenChange={setTaskDialogOpen}
-                    members={selectedProject.members}
-                    onSubmit={(payload) => taskMutation.mutate(payload)}
-                    isPending={taskMutation.isPending}
-                  />
-                ) : null}
-              </CardHeader>
-              <CardContent>
-                <KanbanBoard
-                  tasks={boardTasks}
-                  onReorder={setOptimisticTasks}
-                  canMoveTask={canMoveTask}
-                  onDeniedMove={() =>
-                    toast.info("Members can only move tasks assigned to them")
-                  }
-                  onMove={(taskId, status, order) =>
-                    moveMutation.mutate({ taskId, status, order })
-                  }
-                />
-              </CardContent>
-            </Card>
-            <div className="grid gap-6">
-              <CalendarPanel />
-              <ProjectChat
-                projectId={selectedProjectId}
-                members={selectedProject?.members ?? []}
-                tasks={boardTasks}
-              />
-              <Card className="glass-panel rounded-lg">
-                <CardHeader>
-                  <CardTitle>Status</CardTitle>
-                  <CardDescription>Current project flow</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ChartContainer config={chartConfig} className="h-[240px] w-full">
-                    <BarChart data={statusData}>
-                      <CartesianGrid vertical={false} />
-                      <XAxis dataKey="name" tickLine={false} axisLine={false} />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Bar dataKey="value" radius={6} fill="var(--chart-1)" />
-                    </BarChart>
-                  </ChartContainer>
-                </CardContent>
-              </Card>
-              <Card className="glass-panel rounded-lg">
-                <CardHeader>
-                  <CardTitle>Priority</CardTitle>
-                  <CardDescription>Workload distribution</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ChartContainer config={chartConfig} className="h-[240px] w-full">
-                    <PieChart>
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Pie
-                        data={analytics.priority}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={52}
-                        outerRadius={86}
-                        paddingAngle={4}
-                      >
-                        {analytics.priority.map((item) => (
-                          <Cell
-                            key={item.name}
-                            fill={
-                              priorityColors[item.name as keyof typeof priorityColors] ??
-                              "var(--chart-5)"
-                            }
-                          />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ChartContainer>
-                </CardContent>
-              </Card>
-              <Card className="glass-panel rounded-lg">
-                <CardHeader>
-                  <CardTitle>Notifications</CardTitle>
-                  <CardDescription>Mentions and task events</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3">
-                  {notificationsQuery.data.slice(0, 5).map((notification) => (
-                    <div
-                      key={notification.id}
-                      className="rounded-md border border-white/10 bg-[#11182766] p-3"
-                    >
-                      <p className="text-sm font-medium">{notification.title}</p>
-                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                        {notification.body}
-                      </p>
-                    </div>
-                  ))}
-                  {!notificationsQuery.data.length ? (
-                    <p className="text-sm text-muted-foreground">
-                      No notifications yet.
-                    </p>
-                  ) : null}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </section>
+      <div className="border-t border-white/10 p-4">
+        <button
+          type="button"
+          onClick={() => signOut({ callbackUrl: "/" })}
+          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-white/64 transition hover:bg-white/10 hover:text-white"
+        >
+          <LogOut />
+          Log out
+        </button>
       </div>
-      <TaskSheet
-        task={selectedTask}
-        members={selectedProject?.members ?? []}
-        tasks={boardTasks}
-        canManageProject={canManageProject}
-      />
-    </main>
+    </aside>
+  );
+}
+
+function TopBar({
+  currentUser,
+  roleLabel,
+  unreadCount,
+}: {
+  currentUser: DashboardUser;
+  roleLabel: string;
+  unreadCount: number;
+}) {
+  return (
+    <header className="flex min-h-16 items-center justify-between gap-3 border-b border-border/70 bg-card/40 px-4 backdrop-blur-xl lg:px-5">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex h-9 min-w-0 max-w-xl flex-1 items-center gap-2 rounded-xl border border-border bg-background/70 px-3 text-sm text-muted-foreground shadow-inner">
+          <Search />
+          <input
+            aria-label="Search"
+            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            placeholder="Search people, projects or tasks"
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        <div className="hidden items-center gap-2 rounded-xl border border-border bg-background/60 px-3 py-2 text-sm md:flex">
+          <Bell />
+          <span className="font-medium">{unreadCount}</span>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-xl border border-border bg-background/60 px-2 py-1.5 text-left transition hover:border-primary/30"
+              />
+            }
+          >
+            <Avatar className="size-8">
+              <AvatarImage src={currentUser.image ?? undefined} />
+              <AvatarFallback>{initials(currentUser)}</AvatarFallback>
+            </Avatar>
+            <div className="hidden min-w-0 sm:block">
+              <p className="max-w-32 truncate text-sm font-medium">
+                {currentUser.name ?? currentUser.email}
+              </p>
+              <p className="text-xs text-muted-foreground">{roleLabel}</p>
+            </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[210px]">
+            <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
+              <LogOut />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </header>
+  );
+}
+
+function ProjectCommandHeader({
+  currentUser,
+  selectedProject,
+  selectedProjectRole,
+  canManageProject,
+  isProjectDialogOpen,
+  setProjectDialogOpen,
+  projectMutation,
+  isMemberDialogOpen,
+  setMemberDialogOpen,
+  memberMutation,
+}: {
+  currentUser: DashboardUser;
+  selectedProject: DashboardProject | undefined;
+  selectedProjectRole: "ADMIN" | "MEMBER";
+  canManageProject: boolean;
+  isProjectDialogOpen: boolean;
+  setProjectDialogOpen: (open: boolean) => void;
+  projectMutation: ReturnType<typeof useMutation<{ id: string }, Error, { name: string; description?: string }>>;
+  isMemberDialogOpen: boolean;
+  setMemberDialogOpen: (open: boolean) => void;
+  memberMutation: ReturnType<typeof useMutation<{ kind: "member" | "invitation" }, Error, { email: string; role: "ADMIN" | "MEMBER" }>>;
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
+      <div className="flex flex-col gap-5 p-5 2xl:flex-row 2xl:items-center 2xl:justify-between">
+        <div className="min-w-0">
+          <button
+            type="button"
+            className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground"
+          >
+            <CircleDot />
+            Back to projects
+          </button>
+          <h1 className="truncate text-3xl font-semibold tracking-normal">
+            {selectedProject?.name ?? "Project dashboard"}
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            {selectedProject?.description ??
+              "Manage team work, sync meetings, task execution, and project-level collaboration."}
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3 2xl:min-w-[520px]">
+          <HeaderStat label="Today" value={todayLabel()} />
+          <HeaderStat
+            label="People on project"
+            value={`${selectedProject?.members.length ?? 0} members`}
+          />
+          <HeaderStat label="Access" value={`Project ${selectedProjectRole}`} />
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 px-5 py-3">
+        <div className="flex -space-x-2">
+          {selectedProject?.members.slice(0, 7).map((member) => (
+            <Avatar key={member.id} className="size-8 border-2 border-background">
+              <AvatarImage src={member.user.image ?? undefined} />
+              <AvatarFallback>{initials(member.user)}</AvatarFallback>
+            </Avatar>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {currentUser.role === "ADMIN" ? (
+            <ProjectDialog
+              open={isProjectDialogOpen}
+              onOpenChange={setProjectDialogOpen}
+              onSubmit={(payload) => projectMutation.mutate(payload)}
+              isPending={projectMutation.isPending}
+            />
+          ) : null}
+          {selectedProject && canManageProject ? (
+            <MemberDialog
+              open={isMemberDialogOpen}
+              onOpenChange={setMemberDialogOpen}
+              onSubmit={(payload) => memberMutation.mutate(payload)}
+              isPending={memberMutation.isPending}
+            />
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HeaderStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-background/55 px-3 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 truncate text-sm font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function MetricStrip({ analytics }: { analytics: DashboardAnalytics }) {
+  const done = analytics.status.find((item) => item.name === "DONE")?.value ?? 0;
+  const progress =
+    analytics.status.find((item) => item.name === "IN_PROGRESS")?.value ?? 0;
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <MetricCard title="Total tasks" value={analytics.total} icon={ListTodo} />
+      <MetricCard title="Overdue" value={analytics.overdue} icon={AlertCircle} />
+      <MetricCard title="Done" value={done} icon={CheckCircle2} />
+      <MetricCard title="In progress" value={progress} icon={Timer} />
+    </div>
   );
 }
 
@@ -633,19 +879,132 @@ function MetricCard({
 }: {
   title: string;
   value: number;
-  icon: LucideIcon;
+  icon: typeof ListTodo;
 }) {
   return (
-    <Card className="glass-panel rounded-lg overflow-hidden relative group">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      <CardContent className="flex items-center justify-between gap-4 p-5 relative z-10">
+    <Card className="overflow-hidden rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
+      <CardContent className="flex items-center justify-between gap-3 p-3">
         <div>
-          <p className="text-sm text-muted-foreground">{title}</p>
-          <p className="mt-2 text-3xl font-semibold tracking-normal">{value}</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            {title}
+          </p>
+          <p className="mt-1 text-2xl font-semibold tracking-normal">{value}</p>
         </div>
-        <div className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary shadow-inner transition-transform group-hover:scale-110 group-hover:bg-primary/20 duration-300">
-          <Icon className="size-6" />
+        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+          <Icon />
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReportsPanel({
+  analytics,
+  statusData,
+  notifications,
+}: {
+  analytics: DashboardAnalytics;
+  statusData: Array<{ name: string; value: number }>;
+  notifications: DashboardNotification[];
+}) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <StatusPanel statusData={statusData} />
+      <PriorityPanel analytics={analytics} />
+      <div className="lg:col-span-2">
+        <NotificationPanel notifications={notifications} />
+      </div>
+    </div>
+  );
+}
+
+function StatusPanel({
+  statusData,
+}: {
+  statusData: Array<{ name: string; value: number }>;
+}) {
+  return (
+    <Card className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
+      <CardHeader>
+        <CardTitle>Status</CardTitle>
+        <CardDescription>Current project flow</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ChartContainer config={chartConfig} className="h-[220px] w-full">
+          <BarChart data={statusData}>
+            <CartesianGrid vertical={false} />
+            <XAxis dataKey="name" tickLine={false} axisLine={false} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <Bar dataKey="value" radius={6} fill="var(--chart-1)" />
+          </BarChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PriorityPanel({ analytics }: { analytics: DashboardAnalytics }) {
+  return (
+    <Card className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
+      <CardHeader>
+        <CardTitle>Priority</CardTitle>
+        <CardDescription>Workload distribution</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ChartContainer config={chartConfig} className="h-[220px] w-full">
+          <PieChart>
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <Pie
+              data={analytics.priority}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={48}
+              outerRadius={78}
+              paddingAngle={4}
+            >
+              {analytics.priority.map((item) => (
+                <Cell
+                  key={item.name}
+                  fill={
+                    priorityColors[item.name as keyof typeof priorityColors] ??
+                    "var(--chart-5)"
+                  }
+                />
+              ))}
+            </Pie>
+          </PieChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NotificationPanel({
+  notifications,
+}: {
+  notifications: DashboardNotification[];
+}) {
+  return (
+    <Card className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
+      <CardHeader>
+        <CardTitle>Notifications</CardTitle>
+        <CardDescription>Mentions and task events</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {notifications.slice(0, 5).map((notification) => (
+          <div
+            key={notification.id}
+            className="rounded-xl border border-border bg-background/50 p-3"
+          >
+            <p className="text-sm font-medium">{notification.title}</p>
+            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+              {notification.body}
+            </p>
+          </div>
+        ))}
+        {!notifications.length ? (
+          <p className="text-sm text-muted-foreground">No notifications yet.</p>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -664,9 +1023,7 @@ function ProjectDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger
-        render={<Button size="sm" variant="outline" />}
-      >
+      <DialogTrigger render={<Button size="sm" variant="outline" />}>
         <Plus data-icon="inline-start" />
         New project
       </DialogTrigger>
@@ -733,7 +1090,7 @@ function TaskDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger render={<Button />}>
         <Plus data-icon="inline-start" />
-        New task
+        Create task
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -830,11 +1187,9 @@ function MemberDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger
-        render={<Button size="sm" variant="outline" />}
-      >
+      <DialogTrigger render={<Button size="sm" variant="outline" />}>
         <Users data-icon="inline-start" />
-        Add member
+        Add people
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

@@ -152,7 +152,7 @@ export function ProjectChat({ projectId, members, tasks }: ProjectChatProps) {
   }
 
   return (
-    <Card className="glass-panel rounded-lg">
+    <Card className="rounded-2xl border border-border bg-card/40 backdrop-blur-xl shadow-sm">
       <CardHeader>
         <div className="flex items-center gap-3">
           <div className="grid size-9 place-items-center rounded-md bg-primary/15 text-primary">
@@ -169,7 +169,7 @@ export function ProjectChat({ projectId, members, tasks }: ProjectChatProps) {
           {(messagesQuery.data ?? []).map((message) => (
             <article
               key={message.id}
-              className="rounded-md border border-white/10 bg-[#11182766] p-3"
+              className="rounded-xl border border-border bg-muted/40 p-4 shadow-sm"
             >
               <div className="mb-2 flex items-center gap-2">
                 <Avatar className="size-7">
@@ -210,7 +210,7 @@ export function ProjectChat({ projectId, members, tasks }: ProjectChatProps) {
             </article>
           ))}
           {!messagesQuery.data?.length ? (
-            <div className="rounded-md border border-dashed border-white/10 bg-[#030712]/50 p-5 text-sm text-muted-foreground">
+            <div className="rounded-xl border border-dashed border-border bg-muted/20 p-5 text-sm text-muted-foreground">
               Start a project-wide thread for decisions, blockers, and handoffs.
             </div>
           ) : null}
@@ -237,7 +237,7 @@ export function ProjectChat({ projectId, members, tasks }: ProjectChatProps) {
             rows={3}
           />
           {suggestions.length ? (
-            <div className="rounded-md border border-white/10 bg-[#030712]/95 p-1 shadow-2xl shadow-black/40">
+            <div className="rounded-xl border border-border bg-card p-2 shadow-xl">
               {suggestions.map((suggestion) => (
                 <button
                   key={suggestion.id}
