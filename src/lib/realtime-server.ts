@@ -1,4 +1,5 @@
 import type { Server as HttpServer } from "node:http";
+import { parse as parseCookie } from "cookie";
 import { getToken } from "next-auth/jwt";
 import { Server } from "socket.io";
 import { ensureProjectMembership, ensureTaskAccess } from "@/lib/guards";
@@ -12,19 +13,75 @@ type AuthedSocketData = {
   image?: string | null;
 };
 
+type SocketRequestWithCookies = Parameters<typeof getToken>[0]["req"] & {
+  headers: {
+    cookie?: string;
+  };
+  cookies?: Record<string, string>;
+};
+
+function originFromValue(value?: string | null) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const normalized = /^https?:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`;
+    return new URL(normalized).origin;
+  } catch {
+    logger.warn("realtime.invalid_origin_config", { value: trimmed });
+    return null;
+  }
+}
+
+function allowedOrigins() {
+  return new Set(
+    [
+      originFromValue(process.env.NEXTAUTH_URL),
+      originFromValue(process.env.RAILWAY_PUBLIC_DOMAIN),
+      originFromValue(process.env.VERCEL_URL),
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+    ].filter((origin): origin is string => Boolean(origin)),
+  );
+}
+
 export function attachRealtimeServer(httpServer: HttpServer) {
+  const origins = allowedOrigins();
   const io = new Server(httpServer, {
     path: "/api/socket",
     cors: {
-      origin: process.env.NEXTAUTH_URL ?? "http://localhost:3000",
+      origin(origin, callback) {
+        if (!origin || origins.has(origin)) {
+          callback(null, true);
+          return;
+        }
+
+        logger.warn("realtime.origin_denied", { origin });
+        callback(new Error("Realtime origin denied"));
+      },
       credentials: true,
     },
   });
 
   io.use(async (socket, next) => {
     try {
+      const request = socket.request as SocketRequestWithCookies;
+      const cookieHeader = Array.isArray(request.headers.cookie)
+        ? request.headers.cookie.join("; ")
+        : request.headers.cookie;
+      request.cookies = Object.fromEntries(
+        Object.entries(parseCookie(cookieHeader ?? "")).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      );
+
       const token = await getToken({
-        req: socket.request as Parameters<typeof getToken>[0]["req"],
+        req: request,
         secret: process.env.NEXTAUTH_SECRET,
       });
 

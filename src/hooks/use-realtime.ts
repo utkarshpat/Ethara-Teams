@@ -85,9 +85,9 @@ function useRealtimeEvents(
 
     if (socket.connected) {
       join();
-    } else {
-      socket.once("connect", join);
     }
+
+    socket.on("connect", join);
 
     const boundHandlers = Object.keys(handlersRef.current).map((eventName) => {
       const handler = (payload: unknown) => {
