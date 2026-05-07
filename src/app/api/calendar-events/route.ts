@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, requireApiUser } from "@/lib/api";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import {
   calendarEventCreateSchema,
   calendarEventRangeSchema,
@@ -42,6 +43,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await requireApiUser();
+    enforceRateLimit(request, {
+      scope: "calendar:create",
+      userId: user.id,
+      limit: 30,
+      windowMs: 60_000,
+    });
     const input = calendarEventCreateSchema.parse(await request.json());
     const event = await createCalendarEvent(user.id, input);
     return NextResponse.json(serializeCalendarEvent(event), { status: 201 });

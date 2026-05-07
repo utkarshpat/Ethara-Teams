@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, requireApiUser } from "@/lib/api";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import {
   calendarEventUpdateSchema,
   softDeleteCalendarEvent,
@@ -35,6 +36,12 @@ export async function PATCH(
 ) {
   try {
     const user = await requireApiUser();
+    enforceRateLimit(request, {
+      scope: "calendar:update",
+      userId: user.id,
+      limit: 60,
+      windowMs: 60_000,
+    });
     const { eventId } = await context.params;
     const input = calendarEventUpdateSchema.parse(await request.json());
     const event = await updateCalendarEvent(user.id, eventId, input);
@@ -45,11 +52,17 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: CalendarEventRouteContext,
 ) {
   try {
     const user = await requireApiUser();
+    enforceRateLimit(request, {
+      scope: "calendar:delete",
+      userId: user.id,
+      limit: 30,
+      windowMs: 60_000,
+    });
     const { eventId } = await context.params;
     const event = await softDeleteCalendarEvent(user.id, eventId);
     return NextResponse.json(serializeCalendarEvent(event));

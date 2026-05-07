@@ -93,11 +93,11 @@ Primary roles: Global Admin, Project Admin, Project Member, Anonymous user.
 | ID | Area | Type | Steps | Expected Result |
 | --- | --- | --- | --- | --- |
 | ONB-001 | New Google user first login | Functional | Sign in with new Google account. | User record exists and dashboard handles no projects gracefully. |
-| ONB-002 | New credentials user first login | Functional | Register and verify new account. | User lands in dashboard or invite-linked project depending invite state. |
+| ONB-002 | New credentials user first login | Functional | Register and verify new account. | User lands in dashboard with Member access. |
 | ONB-003 | No project state | UX | Login as user with zero memberships. | Empty project state appears with guidance; no crash. |
-| ONB-004 | Invited user registration | Integration | Invite unknown email, register using that email. | Invitation can be accepted/linked to target project. |
-| ONB-005 | Invite expired | Security | Use expired invitation token. | Access denied; no membership created. |
-| ONB-006 | Invite already accepted | Security | Reuse accepted invitation token. | Token rejected or no duplicate membership created. |
+| ONB-004 | Manual invite registration | Integration | Open the prefilled mail draft for an unknown email, then register using that email. | Account is created as Member; admin can add it to a project after registration. |
+| ONB-005 | Unknown teammate manual invite | Functional | Admin enters an email that is not registered. | App opens a prefilled mail draft; no membership is created. |
+| ONB-006 | New user after manual invite | Functional | Invited person signs up with credentials or Google. | User is created as Member until an admin adds them to a project. |
 
 ## 5. Dashboard Shell and Sidebar Test Cases
 
@@ -132,7 +132,7 @@ Primary roles: Global Admin, Project Admin, Project Member, Anonymous user.
 | PROJ-007 | Project description max | Validation | Submit 500 chars. | Accepted. |
 | PROJ-008 | Project description over max | Validation | Submit 501 chars. | Rejected. |
 | PROJ-009 | Add existing member | Functional | Admin adds existing member email as MEMBER. | ProjectMember upserted and sidebar/team dropdown updates. |
-| PROJ-010 | Add unknown member | Functional | Admin adds non-existing email. | Invitation row created and toast says invitation sent. |
+| PROJ-010 | Add unknown member | Functional | Admin adds non-existing email. | UI offers a prefilled manual mail draft; no automatic invitation row is created. |
 | PROJ-011 | Promote existing user to project Admin | Functional | Global Admin invites/updates user as ADMIN. | User global role and project role become Admin as designed. |
 | PROJ-012 | Non-global project Admin appoints Admin | Security | Project Admin without global Admin tries ADMIN role. | `403 Only global admins can appoint admins`. |
 | PROJ-013 | Duplicate add member | Integration | Add same user twice. | No duplicate ProjectMember; role updates only. |
@@ -334,7 +334,7 @@ Primary roles: Global Admin, Project Admin, Project Member, Anonymous user.
 | API-005 | `/api/projects` | POST | Admin creates project | 403 member, 400 invalid body |
 | API-006 | `/api/projects/:projectId` | PATCH | Admin updates project | 403 non-admin/non-member |
 | API-007 | `/api/projects/:projectId` | DELETE | Admin soft-deletes project | 403 non-admin |
-| API-008 | `/api/projects/:projectId/members` | POST | Admin adds/invites member | 403 non-admin, 400 invalid email |
+| API-008 | `/api/projects/:projectId/members` | POST | Admin adds existing member | 403 non-admin, 404 unknown email, 400 invalid email |
 | API-009 | `/api/projects/:projectId/tasks` | GET | Member lists project tasks | 403 non-member |
 | API-010 | `/api/projects/:projectId/tasks` | POST | Admin creates task | 403 member, 400 invalid enum |
 | API-011 | `/api/tasks/:taskId` | PATCH | Admin/assignee updates allowed fields | 403 unauthorized/admin-only changes |

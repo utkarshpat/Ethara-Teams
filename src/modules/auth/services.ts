@@ -4,7 +4,6 @@ import { sendEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 import { AppError } from "@/lib/guards";
 import { logger } from "@/lib/logger";
-import { applyPendingInvitations } from "@/modules/invitations";
 import type { registerSchema } from "@/modules/auth/validators";
 import type { z } from "zod";
 
@@ -81,8 +80,6 @@ export async function registerUser(input: RegisterInput) {
       text: `Verify your Ethara Teams account: ${verificationUrl}`,
       html: `<p>Verify your Ethara Teams account to start collaborating.</p><p><a href="${verificationUrl}">Verify email</a></p>`,
     });
-  } else {
-    await applyPendingInvitations(email, user.id);
   }
 
   logger.info("auth.register_success", {
@@ -123,8 +120,6 @@ export async function verifyEmail(email: string, token: string) {
   await prisma.verificationToken.deleteMany({
     where: { identifier: normalizedEmail },
   });
-
-  await applyPendingInvitations(normalizedEmail, user.id);
 
   logger.info("auth.email_verified", {
     userId: user.id,

@@ -9,12 +9,14 @@ Ethara Teams is a full-stack modular monolith task management and collaboration 
 - Credentials and Google authentication through NextAuth.
 - Admin and Member RBAC.
 - Project and team membership management.
+- Manual invite drafts for unknown teammates.
 - Project-tenant guard for task, comment, notification, and analytics access.
 - Kanban board with optimistic drag-and-drop.
 - Task-level realtime chat with mention notifications.
 - Self-hosted WebSockets with project and task room authorization.
 - Dashboard analytics for task status, priority, and overdue work.
 - Personal calendar for meetings, events, reminders, and focus blocks.
+- Floating OpenRouter-powered assistant for workspace questions and task/calendar actions.
 - Soft delete support for projects and tasks.
 - Installable PWA manifest and service worker.
 - Docker and Railway deployment setup.
@@ -43,26 +45,27 @@ Admin users can create projects, add existing users as project members, create t
 1. Copy `.env.example` to `.env`.
 2. Fill `DATABASE_URL`, `NEXTAUTH_SECRET`, and `NEXTAUTH_URL`.
 3. Add Google OAuth variables when Google login is needed.
-4. Add `EMAIL_FROM` and `RESEND_API_KEY` when production email verification/invites are needed.
-5. Install dependencies:
+4. Add `EMAIL_FROM` and `RESEND_API_KEY` when production email verification and admin request emails are needed.
+5. Add `OPENROUTER_API_KEY` for the workspace assistant.
+6. Install dependencies:
 
 ```bash
 npm install
 ```
 
-6. Run migrations:
+7. Run migrations:
 
 ```bash
 npm run db:migrate
 ```
 
-7. Load the production starter workspace:
+8. Load the production starter workspace:
 
 ```bash
 npm run db:seed
 ```
 
-8. Start the app:
+9. Start the app:
 
 ```bash
 npm run dev
@@ -82,6 +85,8 @@ GOOGLE_CLIENT_ID="your-google-client-id"
 GOOGLE_CLIENT_SECRET="your-google-client-secret"
 EMAIL_FROM="Ethara Teams <onboarding@your-domain.com>"
 RESEND_API_KEY="your-resend-api-key"
+OPENROUTER_API_KEY="your-openrouter-api-key"
+OPENROUTER_MODEL="google/gemini-3.1-flash-lite-preview"
 ```
 
 Google Cloud redirect URI:
@@ -94,10 +99,10 @@ Role rules:
 
 - The first registered user becomes the bootstrap global Admin.
 - Seeded local/demo credentials create one Admin and one Member for testing.
-- New Google users become Members unless they have a pending Admin invitation.
+- New Google users become Members.
 - Credentials signup requires email verification before password login.
-- Admins can invite users by email from the dashboard. If the user exists, membership updates immediately. If not, the invitation is applied when that email signs up or signs in with Google.
-- Only global Admins can appoint another global Admin by inviting/updating them with the Admin role.
+- Admins can add existing users by email from the Team page. If the email is not registered, the UI opens a prefilled mail draft so the admin can invite the person manually.
+- Only global Admins can appoint or demote another global Admin from the Team page.
 - Existing credential users can link Google sign-in with the same email.
 
 ## Railway Deployment

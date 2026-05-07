@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, requireApiUser } from "@/lib/api";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { addMemberSchema, addProjectMember } from "@/modules/projects";
 import { listProjectUsers } from "@/modules/users";
 
@@ -23,6 +24,12 @@ export async function GET(_request: Request, context: ProjectRouteContext) {
 export async function POST(request: Request, context: ProjectRouteContext) {
   try {
     const user = await requireApiUser();
+    enforceRateLimit(request, {
+      scope: "project-members:update",
+      userId: user.id,
+      limit: 20,
+      windowMs: 60_000,
+    });
     const { projectId } = await context.params;
     const input = addMemberSchema.parse(await request.json());
     const result = await addProjectMember(user.id, projectId, input);

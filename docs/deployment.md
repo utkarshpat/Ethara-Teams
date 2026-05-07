@@ -13,6 +13,8 @@
 - `GOOGLE_CLIENT_SECRET`
 - `EMAIL_FROM`
 - `RESEND_API_KEY`
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_MODEL`
 
 ## Railway Setup
 1. Create a Railway project.
@@ -23,7 +25,8 @@
 6. Use Dockerfile deployment from the repository.
 7. Generate a public domain and set `NEXTAUTH_URL` to that URL.
 8. Add the production Google redirect URI: `https://your-domain/api/auth/callback/google`.
-9. Configure `EMAIL_FROM` and `RESEND_API_KEY` for email verification and invite delivery.
+9. Configure `EMAIL_FROM` and `RESEND_API_KEY` for email verification and admin request delivery.
+10. Configure `OPENROUTER_API_KEY` for the assistant. Keep `OPENROUTER_MODEL` as `google/gemini-3.1-flash-lite-preview` unless you intentionally switch models.
 
 ## Realtime
 Realtime chat and notifications use self-hosted Socket.IO on the same Railway web service. No external realtime provider is required. The server listens on `/api/socket` and authenticates sockets with the NextAuth session cookie.
@@ -54,9 +57,8 @@ Each user has a private calendar for meetings, events, reminders, and focus bloc
 ## Admin And Member Creation
 - The first registered credentials user becomes Admin automatically.
 - Seeded workspaces include one Admin and one Member for local verification.
-- Other Google users are created as Members unless a pending invitation appoints them as Admin.
+- Other Google users are created as Members.
 - Credentials signup requires email verification before password login.
-- Admins invite users to projects from the dashboard by email.
-- If the invited user already exists, project membership is applied immediately.
-- If the invited user does not exist, the invitation is applied when they sign up or sign in with Google using the invited email.
+- Admins add existing users to projects from the Team page by email.
+- If the email is not registered, the app opens a prefilled manual email draft instead of storing an invitation.
 - Only global Admins can appoint another Admin.

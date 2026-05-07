@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, requireApiUser } from "@/lib/api";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import {
   adminRequestCreateSchema,
   listAdminRequests,
@@ -33,6 +34,12 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const user = await requireApiUser();
+    enforceRateLimit(request, {
+      scope: "admin-requests:create",
+      userId: user.id,
+      limit: 5,
+      windowMs: 60_000,
+    });
     const input = adminRequestCreateSchema.parse(await request.json());
     const adminRequest = await createAdminRequest(user.id, input);
     return NextResponse.json(serializeAdminRequest(adminRequest), { status: 201 });

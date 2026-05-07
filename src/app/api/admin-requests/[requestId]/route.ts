@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, requireApiUser } from "@/lib/api";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import {
   adminRequestReviewSchema,
   listAdminRequests,
@@ -32,6 +33,12 @@ export async function PATCH(
 ) {
   try {
     const user = await requireApiUser();
+    enforceRateLimit(request, {
+      scope: "admin-requests:review",
+      userId: user.id,
+      limit: 30,
+      windowMs: 60_000,
+    });
     const { requestId } = await context.params;
     const input = adminRequestReviewSchema.parse(await request.json());
     const adminRequest = await reviewAdminRequest(user.id, requestId, input);

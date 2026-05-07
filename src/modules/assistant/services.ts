@@ -44,7 +44,6 @@ const SUMMARY_THRESHOLD = 24;
 function assistantModel() {
   return (
     process.env.OPENROUTER_MODEL ||
-    process.env.GEMINI_MODEL ||
     "google/gemini-3.1-flash-lite-preview"
   );
 }
@@ -334,6 +333,20 @@ async function executeTool(userId: string, call: OpenRouterToolCall) {
   throw new AppError("Unsupported assistant action", 400);
 }
 
+function toolResultReply(result: Awaited<ReturnType<typeof executeTool>>) {
+  if (result.action === "task_created") {
+    return `Done. I created "${result.title}" in this project.`;
+  }
+
+  if (result.action === "calendar_event_created") {
+    return result.location
+      ? `Done. I created "${result.title}" and added the meeting link.`
+      : `Done. I created "${result.title}" on your calendar.`;
+  }
+
+  return "Done. I completed that action.";
+}
+
 async function summarizeIfNeeded(conversationId: string) {
   const messages = await prisma.assistantMessage.findMany({
     where: { conversationId },
@@ -422,23 +435,7 @@ export async function chatWithAssistant(
 
   if (toolCall) {
     const result = await executeTool(userId, toolCall);
-    const secondResponse = await callOpenRouter(
-      [
-        ...contents,
-        {
-          role: "assistant",
-          content: firstResponse.choices?.[0]?.message?.content ?? null,
-          tool_calls: [toolCall],
-        },
-        {
-          role: "tool",
-          tool_call_id: toolCall.id,
-          content: JSON.stringify(result),
-        },
-      ],
-      systemInstruction,
-    );
-    reply = textFromResponse(secondResponse);
+    reply = toolResultReply(result);
   }
 
   await prisma.assistantMessage.create({

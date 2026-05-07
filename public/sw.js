@@ -1,5 +1,6 @@
 const CACHE_NAME = "ethara-teams-v1";
-const STATIC_ASSETS = ["/", "/login", "/register", "/manifest.webmanifest"];
+const STATIC_ASSETS = ["/login", "/register", "/manifest.webmanifest"];
+const PUBLIC_PATHS = new Set(STATIC_ASSETS);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -21,8 +22,14 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
+  const url = new URL(request.url);
 
-  if (request.method !== "GET" || request.url.includes("/api/")) {
+  if (
+    request.method !== "GET" ||
+    url.origin !== self.location.origin ||
+    url.pathname.startsWith("/api/") ||
+    !PUBLIC_PATHS.has(url.pathname)
+  ) {
     return;
   }
 
@@ -33,6 +40,6 @@ self.addEventListener("fetch", (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         return response;
       })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match("/"))),
+      .catch(() => caches.match(request).then((cached) => cached || caches.match("/login"))),
   );
 });

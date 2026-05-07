@@ -6,7 +6,7 @@ import GoogleProvider from "next-auth/providers/google";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { applyPendingInvitations } from "@/modules/invitations";
+import { enforceActorRateLimit } from "@/lib/rate-limit";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -27,8 +27,15 @@ const providers: NextAuthOptions["providers"] = [
         return null;
       }
 
+      const email = parsed.data.email.toLowerCase();
+      enforceActorRateLimit(email, {
+        scope: "auth:credentials",
+        limit: 10,
+        windowMs: 60_000,
+      });
+
       const user = await prisma.user.findUnique({
-        where: { email: parsed.data.email.toLowerCase() },
+        where: { email },
       });
 
       if (!user?.passwordHash) {
@@ -90,7 +97,6 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google" && user.email && user.id) {
-        await applyPendingInvitations(user.email, user.id);
         logger.info("auth.google_success", {
           userId: user.id,
         });
@@ -136,10 +142,6 @@ export const authOptions: NextAuthOptions = {
           data: { role: "ADMIN", emailVerified: new Date() },
         });
         logger.info("auth.user_promoted", { userId: user.id });
-      }
-
-      if (user.email) {
-        await applyPendingInvitations(user.email, user.id);
       }
     },
   },

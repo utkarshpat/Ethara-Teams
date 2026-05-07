@@ -72,7 +72,6 @@ model User {
   comments              Comment[]
   projectMessages       ProjectMessage[]
   notifications         Notification[]
-  sentInvitations       Invitation[]           @relation("InvitationSender")
   calendarEvents        CalendarEvent[]
   adminRequests         AdminRequest[]         @relation("AdminRequestRequester")
   reviewedRequests      AdminRequest[]         @relation("AdminRequestReviewer")
@@ -198,30 +197,9 @@ model Project {
   members     ProjectMember[]
   tasks       Task[]
   messages    ProjectMessage[]
-  invitations Invitation[]
 
   @@index([ownerId])
   @@index([deletedAt])
-}
-
-model Invitation {
-  id          String    @id @default(cuid())
-  email       String
-  role        Role      @default(MEMBER)
-  projectId   String?
-  invitedById String
-  token       String    @unique
-  expiresAt   DateTime
-  acceptedAt  DateTime?
-  createdAt   DateTime  @default(now())
-
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  invitedBy User     @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: Cascade)
-
-  @@index([email])
-  @@index([projectId])
-  @@index([invitedById])
-  @@index([acceptedAt])
 }
 
 model ProjectMember {
