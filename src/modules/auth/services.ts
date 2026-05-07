@@ -9,16 +9,29 @@ import type { z } from "zod";
 
 type RegisterInput = z.infer<typeof registerSchema>;
 
-function appUrl(path: string) {
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-  return new URL(path, baseUrl).toString();
+function appUrl(path: string, requestOrigin: string) {
+  const bases = [
+    process.env.NEXTAUTH_URL?.trim(),
+    requestOrigin,
+    "http://localhost:3000",
+  ].filter((base): base is string => Boolean(base));
+
+  for (const baseUrl of bases) {
+    try {
+      return new URL(path, baseUrl).toString();
+    } catch {
+      logger.warn("auth.invalid_app_url_base", { baseUrl });
+    }
+  }
+
+  return `http://localhost:3000${path}`;
 }
 
 function verificationToken() {
   return randomBytes(32).toString("hex");
 }
 
-export async function registerUser(input: RegisterInput) {
+export async function registerUser(input: RegisterInput, requestOrigin: string) {
   const email = input.email.toLowerCase();
   const username = input.username.toLowerCase();
 
@@ -64,6 +77,7 @@ export async function registerUser(input: RegisterInput) {
     const expires = new Date(Date.now() + 1000 * 60 * 60 * 24);
     verificationUrl = appUrl(
       `/api/auth/verify-email?email=${encodeURIComponent(email)}&token=${token}`,
+      requestOrigin,
     );
 
     await prisma.verificationToken.create({

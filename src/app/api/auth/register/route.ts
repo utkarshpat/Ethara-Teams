@@ -11,7 +11,7 @@ export async function POST(request: Request) {
       windowMs: 60_000,
     });
     const input = registerSchema.parse(await request.json());
-    const user = await registerUser(input);
+    const user = await registerUser(input, new URL(request.url).origin);
     return NextResponse.json(user, { status: 201 });
   } catch (error) {
     return apiError(error);

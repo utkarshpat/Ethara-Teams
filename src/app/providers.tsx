@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SessionProvider } from "next-auth/react";
 import { ThemeProvider } from "next-themes";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -10,6 +11,8 @@ import { AssistantFab } from "@/components/assistant-fab";
 import { PwaRegister } from "@/components/pwa-register";
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const showAssistant = pathname?.startsWith("/dashboard") ?? false;
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -33,7 +36,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
             {children}
-            <AssistantFab />
+            {showAssistant ? <AssistantFab /> : null}
             <Toaster richColors position="top-right" />
             <PwaRegister />
           </TooltipProvider>
