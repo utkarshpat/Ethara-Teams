@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { AppError } from "@/lib/guards";
+import { createGoogleMeetEvent } from "@/lib/google-calendar";
 import { logger } from "@/lib/logger";
+import { createNotification } from "@/modules/notifications/services";
 import type {
   calendarEventCreateSchema,
   calendarEventRangeSchema,
@@ -11,6 +13,9 @@ import type { z } from "zod";
 type CalendarEventCreateInput = z.infer<typeof calendarEventCreateSchema>;
 type CalendarEventUpdateInput = z.infer<typeof calendarEventUpdateSchema>;
 type CalendarEventRangeInput = z.infer<typeof calendarEventRangeSchema>;
+
+const REMINDER_LOOKAHEAD_DAYS = 14;
+const REMINDER_GRACE_MS = 24 * 60 * 60 * 1000;
 
 function assertValidRange(startAt: Date, endAt: Date) {
   if (endAt <= startAt) {
@@ -29,6 +34,7 @@ export async function listCalendarEvents(
   userId: string,
   input: CalendarEventRangeInput = {},
 ) {
+  await deliverDueCalendarReminders(userId);
   const { from, to } = defaultRange(input);
 
   return prisma.calendarEvent.findMany({
@@ -51,13 +57,22 @@ export async function createCalendarEvent(
   const startAt = new Date(input.startAt);
   const endAt = new Date(input.endAt);
   assertValidRange(startAt, endAt);
+  const meetEvent = input.createGoogleMeet
+    ? await createGoogleMeetEvent({
+        userId,
+        title: input.title,
+        notes: input.notes || null,
+        startAt,
+        endAt,
+      })
+    : null;
 
   const event = await prisma.calendarEvent.create({
     data: {
       userId,
       title: input.title,
       notes: input.notes || null,
-      location: input.location || null,
+      location: meetEvent?.meetUrl ?? (input.location || null),
       type: input.type,
       startAt,
       endAt,
@@ -104,6 +119,12 @@ export async function updateCalendarEvent(
       endAt,
       reminderMinutes:
         input.reminderMinutes === undefined ? undefined : input.reminderMinutes,
+      reminderSentAt:
+        input.startAt !== undefined ||
+        input.reminderMinutes !== undefined ||
+        input.status === "SCHEDULED"
+          ? null
+          : undefined,
     },
   });
 
@@ -133,4 +154,65 @@ export async function softDeleteCalendarEvent(userId: string, eventId: string) {
 
   logger.info("calendar.event_deleted", { userId, eventId });
   return event;
+}
+
+export async function deliverDueCalendarReminders(userId: string) {
+  const now = new Date();
+  const maxStartAt = new Date(
+    now.getTime() + REMINDER_LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const minStartAt = new Date(now.getTime() - REMINDER_GRACE_MS);
+  const events = await prisma.calendarEvent.findMany({
+    where: {
+      userId,
+      status: "SCHEDULED",
+      deletedAt: null,
+      reminderSentAt: null,
+      reminderMinutes: { not: null },
+      startAt: {
+        gte: minStartAt,
+        lte: maxStartAt,
+      },
+    },
+    orderBy: { startAt: "asc" },
+  });
+
+  const dueEvents = events.filter((event) => {
+    const reminderMs = (event.reminderMinutes ?? 0) * 60_000;
+    return event.startAt.getTime() - reminderMs <= now.getTime();
+  });
+
+  let delivered = 0;
+
+  for (const event of dueEvents) {
+    const result = await prisma.calendarEvent.updateMany({
+      where: {
+        id: event.id,
+        userId,
+        reminderSentAt: null,
+      },
+      data: {
+        reminderSentAt: now,
+      },
+    });
+
+    if (!result.count) {
+      continue;
+    }
+
+    await createNotification({
+      userId,
+      type: "COMMENT",
+      title: `Reminder: ${event.title}`,
+      body: `${event.type.toLowerCase()} starts at ${event.startAt.toLocaleString()}`,
+      link: "/dashboard/calendar",
+    });
+    delivered += 1;
+  }
+
+  if (delivered) {
+    logger.info("calendar.reminders_delivered", { userId, delivered });
+  }
+
+  return { delivered };
 }

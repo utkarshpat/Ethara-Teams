@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AssistantFab } from "@/components/assistant-fab";
 import { PwaRegister } from "@/components/pwa-register";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -32,6 +33,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
             {children}
+            <AssistantFab />
             <Toaster richColors position="top-right" />
             <PwaRegister />
           </TooltipProvider>

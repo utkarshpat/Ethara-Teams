@@ -165,12 +165,6 @@ export async function updateTask(
     include: taskInclude,
   });
 
-  if (input.status && input.status !== task.status) {
-    await triggerProjectEvent(task.projectId, "task:status_changed", updated);
-  } else {
-    await triggerProjectEvent(task.projectId, "task:updated", updated);
-  }
-
   if (input.assignedToId && input.assignedToId !== task.assignedToId) {
     await createNotification({
       userId: input.assignedToId,
@@ -179,6 +173,27 @@ export async function updateTask(
       body: updated.title,
       link: `/dashboard?projectId=${task.projectId}&taskId=${taskId}`,
     });
+  }
+
+  if (
+    input.status &&
+    input.status !== task.status &&
+    updated.assignedToId &&
+    updated.assignedToId !== userId
+  ) {
+    await createNotification({
+      userId: updated.assignedToId,
+      type: "STATUS_CHANGE",
+      title: "Task status updated",
+      body: `${updated.title} moved to ${updated.status.replace("_", " ")}`,
+      link: `/dashboard?projectId=${task.projectId}&taskId=${taskId}`,
+    });
+  }
+
+  if (input.status && input.status !== task.status) {
+    await triggerProjectEvent(task.projectId, "task:status_changed", updated);
+  } else {
+    await triggerProjectEvent(task.projectId, "task:updated", updated);
   }
 
   logger.info("task.updated", {

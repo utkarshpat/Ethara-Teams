@@ -1,5 +1,6 @@
 export {
   createCalendarEvent,
+  deliverDueCalendarReminders,
   listCalendarEvents,
   softDeleteCalendarEvent,
   updateCalendarEvent,

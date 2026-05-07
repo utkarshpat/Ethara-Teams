@@ -1,5 +1,9 @@
 import type { Priority, Role, TaskStatus } from "@prisma/client";
-import type { CalendarEventStatus, CalendarEventType } from "@prisma/client";
+import type {
+  AdminRequestStatus,
+  CalendarEventStatus,
+  CalendarEventType,
+} from "@prisma/client";
 
 export type DashboardUser = {
   id: string;
@@ -23,6 +27,16 @@ export type DashboardMember = {
   id: string;
   role: Role;
   user: DashboardUser;
+};
+
+export type DashboardAdminRequest = {
+  id: string;
+  status: AdminRequestStatus;
+  message: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  user: DashboardUser;
+  reviewedBy: DashboardUser | null;
 };
 
 export type DashboardProject = {

@@ -46,6 +46,12 @@ enum CalendarEventStatus {
   CANCELLED
 }
 
+enum AdminRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -58,16 +64,19 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts        Account[]
-  sessions        Session[]
-  ownedProjects   Project[]        @relation("ProjectOwner")
-  memberships     ProjectMember[]
-  assignedTasks   Task[]           @relation("TaskAssignee")
-  comments        Comment[]
-  projectMessages ProjectMessage[]
-  notifications   Notification[]
-  sentInvitations Invitation[]     @relation("InvitationSender")
-  calendarEvents  CalendarEvent[]
+  accounts              Account[]
+  sessions              Session[]
+  ownedProjects         Project[]              @relation("ProjectOwner")
+  memberships           ProjectMember[]
+  assignedTasks         Task[]                 @relation("TaskAssignee")
+  comments              Comment[]
+  projectMessages       ProjectMessage[]
+  notifications         Notification[]
+  sentInvitations       Invitation[]           @relation("InvitationSender")
+  calendarEvents        CalendarEvent[]
+  adminRequests         AdminRequest[]         @relation("AdminRequestRequester")
+  reviewedRequests      AdminRequest[]         @relation("AdminRequestReviewer")
+  assistantConversation AssistantConversation?
 
   @@index([role])
 }
@@ -82,6 +91,7 @@ model CalendarEvent {
   startAt         DateTime
   endAt           DateTime
   reminderMinutes Int?
+  reminderSentAt  DateTime?
   userId          String
   deletedAt       DateTime?
   createdAt       DateTime            @default(now())
@@ -93,6 +103,47 @@ model CalendarEvent {
   @@index([userId, startAt])
   @@index([userId, status])
   @@index([userId, deletedAt])
+}
+
+model AdminRequest {
+  id           String             @id @default(cuid())
+  userId       String
+  status       AdminRequestStatus @default(PENDING)
+  message      String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  user       User  @relation("AdminRequestRequester", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("AdminRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AssistantConversation {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  summary   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AssistantMessage[]
+}
+
+model AssistantMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String
+  content        String   @db.Text
+  createdAt      DateTime @default(now())
+
+  conversation AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }
 
 model Account {

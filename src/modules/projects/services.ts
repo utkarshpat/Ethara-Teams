@@ -1,8 +1,7 @@
-import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AppError, ensureProjectMembership } from "@/lib/guards";
 import { logger } from "@/lib/logger";
-import { createInvitation } from "@/modules/invitations";
+import { createNotification } from "@/modules/notifications/services";
 import type { addMemberSchema, projectCreateSchema } from "@/modules/projects/validators";
 import type { z } from "zod";
 
@@ -71,6 +70,13 @@ export async function createProject(userId: string, input: ProjectCreateInput) {
   });
 
   logger.info("project.created", { userId, projectId: project.id });
+  await createNotification({
+    userId,
+    type: "COMMENT",
+    title: "Project created",
+    body: project.name,
+    link: `/dashboard?projectId=${project.id}`,
+  });
   return project;
 }
 
@@ -94,21 +100,17 @@ export async function addProjectMember(
 
   const target = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, role: true },
+    select: { id: true, name: true, email: true, role: true },
   });
 
   if (!target) {
-    const invitation = await createInvitation({
-      email,
-      role: input.role as Role,
+    logger.info("project.member_missing_manual_mail_required", {
+      actorId: userId,
       projectId,
-      invitedById: userId,
+      email,
+      role: input.role,
     });
-
-    return {
-      kind: "invitation" as const,
-      invitation,
-    };
+    throw new AppError("User not found. Open a manual email draft and ask them to sign up first.", 404);
   }
 
   const member = await prisma.$transaction(async (tx) => {
@@ -116,6 +118,30 @@ export async function addProjectMember(
       await tx.user.update({
         where: { id: target.id },
         data: { role: "ADMIN" },
+      });
+    }
+
+    if (input.role === "MEMBER" && target.role === "ADMIN") {
+      if (actor?.role !== "ADMIN") {
+        logger.warn("project.admin_demote_denied", { projectId, actorId: userId });
+        throw new AppError("Only global admins can demote admins", 403);
+      }
+
+      if (target.id === userId) {
+        throw new AppError("You cannot demote yourself", 400);
+      }
+
+      const adminCount = await tx.user.count({
+        where: { role: "ADMIN" },
+      });
+
+      if (adminCount <= 1) {
+        throw new AppError("At least one global admin is required", 400);
+      }
+
+      await tx.user.update({
+        where: { id: target.id },
+        data: { role: "MEMBER" },
       });
     }
 
@@ -129,10 +155,10 @@ export async function addProjectMember(
       create: {
         projectId,
         userId: target.id,
-        role: input.role as Role,
+        role: input.role,
       },
       update: {
-        role: input.role as Role,
+        role: input.role,
       },
     });
   });
@@ -142,6 +168,13 @@ export async function addProjectMember(
     projectId,
     memberUserId: target.id,
     role: input.role,
+  });
+  await createNotification({
+    userId: target.id,
+    type: "ASSIGNMENT",
+    title: input.role === "ADMIN" ? "Admin access updated" : "Team role updated",
+    body: `You now have ${input.role} access`,
+    link: `/dashboard?projectId=${projectId}`,
   });
   return {
     kind: "member" as const,

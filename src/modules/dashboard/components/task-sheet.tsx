@@ -364,6 +364,14 @@ export function TaskSheet({
     setCursor(token.start + value.length + 1);
   }
 
+  function sendComment() {
+    if (!body.trim() || commentMutation.isPending) {
+      return;
+    }
+
+    commentMutation.mutate(body.trim());
+  }
+
   return (
     <Sheet
       open={Boolean(selectedTaskId && task)}
@@ -478,10 +486,7 @@ export function TaskSheet({
               className="sticky bottom-0 flex flex-col gap-3 bg-background/85 py-3 backdrop-blur"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!body.trim()) {
-                  return;
-                }
-                commentMutation.mutate(body.trim());
+                sendComment();
               }}
             >
               <Textarea
@@ -491,6 +496,12 @@ export function TaskSheet({
                   setCursor(event.target.selectionStart);
                 }}
                 onKeyUp={(event) => setCursor(event.currentTarget.selectionStart)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    sendComment();
+                  }
+                }}
                 onClick={(event) => setCursor(event.currentTarget.selectionStart)}
                 placeholder="Write a comment or mention @mira"
                 rows={4}

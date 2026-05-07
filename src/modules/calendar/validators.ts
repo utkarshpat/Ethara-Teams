@@ -8,6 +8,7 @@ export const calendarEventCreateSchema = z.object({
   startAt: z.string().datetime(),
   endAt: z.string().datetime(),
   reminderMinutes: z.number().int().min(0).max(10080).optional().nullable(),
+  createGoogleMeet: z.boolean().optional().default(false),
 });
 
 export const calendarEventUpdateSchema = calendarEventCreateSchema

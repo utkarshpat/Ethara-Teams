@@ -9,6 +9,7 @@ import {
   MapPin,
   Plus,
   Trash2,
+  Video,
   XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -161,6 +162,7 @@ export function CalendarPanel() {
       startAt: string;
       endAt: string;
       reminderMinutes?: number | null;
+      createGoogleMeet?: boolean;
     }) =>
       fetchJson<DashboardCalendarEvent>("/api/calendar-events", {
         method: "POST",
@@ -437,6 +439,7 @@ function CalendarEventDialog({
     startAt: string;
     endAt: string;
     reminderMinutes?: number | null;
+    createGoogleMeet?: boolean;
   }) => void;
   isPending: boolean;
 }) {
@@ -520,6 +523,7 @@ function CalendarEventDialog({
               startAt: startAt.toISOString(),
               endAt: endAt.toISOString(),
               reminderMinutes,
+              createGoogleMeet: formData.get("createGoogleMeet") === "on",
             });
           }}
         >
@@ -583,13 +587,31 @@ function CalendarEventDialog({
               <FieldLabel htmlFor="calendar-location">Location or link</FieldLabel>
               <Input id="calendar-location" name="location" />
             </Field>
+            <Field className="flex-row items-center justify-between gap-3 rounded-lg border border-border bg-background/45 p-3">
+              <div>
+                <FieldLabel htmlFor="calendar-meet">Google Meet</FieldLabel>
+                <p className="text-xs text-muted-foreground">
+                  Create a Meet link through your connected Google Calendar.
+                </p>
+              </div>
+              <input
+                id="calendar-meet"
+                name="createGoogleMeet"
+                type="checkbox"
+                className="size-4 accent-primary"
+              />
+            </Field>
             <Field>
               <FieldLabel htmlFor="calendar-notes">Notes</FieldLabel>
               <Textarea id="calendar-notes" name="notes" rows={3} />
             </Field>
           </FieldGroup>
           <Button type="submit" disabled={isPending}>
-            <CalendarClock data-icon="inline-start" />
+            {type === "MEETING" ? (
+              <Video data-icon="inline-start" />
+            ) : (
+              <CalendarClock data-icon="inline-start" />
+            )}
             Save event
           </Button>
         </form>

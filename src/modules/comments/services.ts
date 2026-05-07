@@ -100,6 +100,8 @@ export async function createTaskComment(
 
   const mentionKeys = [...new Set(extractMentionKeys(input.body))];
 
+  let notificationCount = 0;
+
   if (mentionKeys.length) {
     const mentionedUsers = await prisma.user.findMany({
       where: {
@@ -118,19 +120,29 @@ export async function createTaskComment(
       },
     });
 
-    await Promise.all(
-      mentionedUsers
-        .filter((mentionedUser) => mentionedUser.id !== userId)
-        .map((mentionedUser) =>
-          createNotification({
-            userId: mentionedUser.id,
-            type: "MENTION",
-            title: "You were mentioned",
-            body: comment.body,
-            link: `/dashboard?projectId=${task.projectId}&taskId=${taskId}`,
-          }),
-        ),
+    const notificationTargets = mentionedUsers.filter(
+      (mentionedUser) => mentionedUser.id !== userId,
     );
+
+    await Promise.all(
+      notificationTargets.map((mentionedUser) =>
+        createNotification({
+          userId: mentionedUser.id,
+          type: "MENTION",
+          title: "You were mentioned",
+          body: comment.body,
+          link: `/dashboard?projectId=${task.projectId}&taskId=${taskId}`,
+        }),
+      ),
+    );
+    notificationCount = notificationTargets.length;
+  }
+
+  if (notificationCount) {
+    await triggerProjectEvent(task.projectId, "notifications:changed", {
+      type: "MENTION",
+      count: notificationCount,
+    });
   }
 
   logger.info("comment.created", {

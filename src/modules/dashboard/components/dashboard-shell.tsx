@@ -10,12 +10,16 @@ import {
   CheckCheck,
   CheckCircle2,
   ChevronDown,
+  Crown,
   LayoutDashboard,
   ListTodo,
   LogOut,
+  Mail,
   MessageSquare,
   Plus,
   Search,
+  ShieldCheck,
+  ShieldOff,
   Timer,
   Trash2,
   Users,
@@ -82,6 +86,7 @@ import {
 import { TaskSheet } from "@/modules/dashboard/components/task-sheet";
 import type {
   DashboardAnalytics,
+  DashboardAdminRequest,
   DashboardTrash,
   DashboardNotification,
   DashboardProjectMessage,
@@ -100,6 +105,10 @@ type DashboardShellProps = {
   initialNotifications: DashboardNotification[];
   initialProjectId: string | null;
   initialView: DashboardView;
+};
+
+type MemberMutationResult = {
+  kind: "member";
 };
 
 const chartConfig = {
@@ -231,6 +240,9 @@ export function DashboardShell({
 
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
+    "notifications:changed": () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
   });
 
   const projectsQuery = useQuery({
@@ -271,6 +283,12 @@ export function DashboardShell({
     queryKey: ["trash"],
     queryFn: () => fetchJson<DashboardTrash>("/api/trash"),
     enabled: activeView === "trash",
+  });
+
+  const adminRequestsQuery = useQuery({
+    queryKey: ["admin-requests"],
+    queryFn: () => fetchJson<DashboardAdminRequest[]>("/api/admin-requests"),
+    enabled: activeView === "team",
   });
 
   const selectedProject = projectsQuery.data.find(
@@ -361,7 +379,7 @@ export function DashboardShell({
 
   const memberMutation = useMutation({
     mutationFn: (payload: { email: string; role: "ADMIN" | "MEMBER" }) =>
-      fetchJson<{ kind: "member" | "invitation" }>(
+      fetchJson<MemberMutationResult>(
         `/api/projects/${selectedProjectId}/members`,
         {
           method: "POST",
@@ -372,9 +390,45 @@ export function DashboardShell({
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
       setMemberDialogOpen(false);
-      toast.success(
-        result.kind === "invitation" ? "Invitation sent" : "Member updated",
-      );
+      toast.success(result.kind === "member" ? "Member updated" : "Done");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const adminRequestMutation = useMutation({
+    mutationFn: (payload: { message?: string }) =>
+      fetchJson<DashboardAdminRequest>("/api/admin-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
+      toast.success("Admin request sent");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const adminReviewMutation = useMutation({
+    mutationFn: (payload: {
+      requestId: string;
+      status: "APPROVED" | "REJECTED";
+    }) =>
+      fetchJson<DashboardAdminRequest>(
+        `/api/admin-requests/${payload.requestId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: payload.status }),
+        },
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin-requests"] }),
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+        queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+      ]);
+      toast.success("Admin request reviewed");
     },
     onError: (error) => toast.error(error.message),
   });
@@ -548,11 +602,22 @@ export function DashboardShell({
                   ) : null}
                   {activeView === "team" ? (
                     <TeamPanel
+                      currentUser={currentUser}
                       selectedProject={selectedProject}
                       canManageProject={canManageProject}
                       isMemberDialogOpen={isMemberDialogOpen}
                       setMemberDialogOpen={setMemberDialogOpen}
                       memberMutation={memberMutation}
+                      adminRequests={adminRequestsQuery.data ?? []}
+                      isLoadingAdminRequests={adminRequestsQuery.isLoading}
+                      onRequestAdmin={(message) =>
+                        adminRequestMutation.mutate({ message })
+                      }
+                      isRequestingAdmin={adminRequestMutation.isPending}
+                      onReviewAdminRequest={(requestId, status) =>
+                        adminReviewMutation.mutate({ requestId, status })
+                      }
+                      isReviewingAdmin={adminReviewMutation.isPending}
                     />
                   ) : null}
                   {activeView === "trash" ? (
@@ -657,7 +722,7 @@ function WorkspaceSidebar({
   projectMutation: ReturnType<typeof useMutation<{ id: string }, Error, { name: string; description?: string }>>;
   isMemberDialogOpen: boolean;
   setMemberDialogOpen: (open: boolean) => void;
-  memberMutation: ReturnType<typeof useMutation<{ kind: "member" | "invitation" }, Error, { email: string; role: "ADMIN" | "MEMBER" }>>;
+  memberMutation: ReturnType<typeof useMutation<MemberMutationResult, Error, { email: string; role: "ADMIN" | "MEMBER" }>>;
   isTaskDialogOpen: boolean;
   setTaskDialogOpen: (open: boolean) => void;
   taskMutation: ReturnType<typeof useMutation<DashboardTask, Error, {
@@ -829,6 +894,7 @@ function WorkspaceSidebar({
             <MemberDialog
               open={isMemberDialogOpen}
               onOpenChange={setMemberDialogOpen}
+              projectName={selectedProject.name}
               onSubmit={(payload) => memberMutation.mutate(payload)}
               isPending={memberMutation.isPending}
             />
@@ -1125,18 +1191,41 @@ function OverviewPanel({
 }
 
 function TeamPanel({
+  currentUser,
   selectedProject,
   canManageProject,
   isMemberDialogOpen,
   setMemberDialogOpen,
   memberMutation,
+  adminRequests,
+  isLoadingAdminRequests,
+  onRequestAdmin,
+  isRequestingAdmin,
+  onReviewAdminRequest,
+  isReviewingAdmin,
 }: {
+  currentUser: DashboardUser;
   selectedProject: DashboardProject | undefined;
   canManageProject: boolean;
   isMemberDialogOpen: boolean;
   setMemberDialogOpen: (open: boolean) => void;
-  memberMutation: ReturnType<typeof useMutation<{ kind: "member" | "invitation" }, Error, { email: string; role: "ADMIN" | "MEMBER" }>>;
+  memberMutation: ReturnType<typeof useMutation<MemberMutationResult, Error, { email: string; role: "ADMIN" | "MEMBER" }>>;
+  adminRequests: DashboardAdminRequest[];
+  isLoadingAdminRequests: boolean;
+  onRequestAdmin: (message: string) => void;
+  isRequestingAdmin: boolean;
+  onReviewAdminRequest: (
+    requestId: string,
+    status: "APPROVED" | "REJECTED",
+  ) => void;
+  isReviewingAdmin: boolean;
 }) {
+  const [adminRequestMessage, setAdminRequestMessage] = useState("");
+  const pendingRequest = adminRequests.find(
+    (request) =>
+      request.user.id === currentUser.id && request.status === "PENDING",
+  );
+
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card/45 p-4">
@@ -1150,18 +1239,63 @@ function TeamPanel({
           <MemberDialog
             open={isMemberDialogOpen}
             onOpenChange={setMemberDialogOpen}
+            projectName={selectedProject.name}
             onSubmit={(payload) => memberMutation.mutate(payload)}
             isPending={memberMutation.isPending}
           />
         ) : null}
       </div>
+      {currentUser.role !== "ADMIN" ? (
+        <Card className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Crown />
+              Admin access
+            </CardTitle>
+            <CardDescription>
+              Ask workspace admins to approve project and team management access.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <Textarea
+              value={adminRequestMessage}
+              onChange={(event) => setAdminRequestMessage(event.target.value)}
+              rows={3}
+              placeholder="Why do you need admin access?"
+              disabled={Boolean(pendingRequest) || isRequestingAdmin}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Badge variant={pendingRequest ? "secondary" : "outline"}>
+                {pendingRequest ? "Pending approval" : "No pending request"}
+              </Badge>
+              <Button
+                type="button"
+                size="sm"
+                disabled={Boolean(pendingRequest) || isRequestingAdmin}
+                onClick={() => onRequestAdmin(adminRequestMessage)}
+              >
+                <ShieldCheck data-icon="inline-start" />
+                Request admin
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <AdminRequestsPanel
+          requests={adminRequests}
+          isLoading={isLoadingAdminRequests}
+          onReview={onReviewAdminRequest}
+          isReviewing={isReviewingAdmin}
+        />
+      )}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {selectedProject?.members.map((member) => (
           <Card
             key={member.id}
             className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl"
           >
-            <CardContent className="flex items-center justify-between gap-3 p-4">
+            <CardContent className="flex flex-col gap-3 p-4">
+              <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <Avatar className="size-10">
                   <AvatarImage src={member.user.image ?? undefined} />
@@ -1176,12 +1310,127 @@ function TeamPanel({
                   </p>
                 </div>
               </div>
-              <Badge variant="outline">{member.role}</Badge>
+                <Badge variant={member.role === "ADMIN" ? "secondary" : "outline"}>
+                  {member.role}
+                </Badge>
+              </div>
+              {canManageProject && member.user.email ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={member.role === "ADMIN" ? "secondary" : "outline"}
+                    disabled={memberMutation.isPending || member.role === "ADMIN"}
+                    onClick={() =>
+                      memberMutation.mutate({
+                        email: member.user.email as string,
+                        role: "ADMIN",
+                      })
+                    }
+                  >
+                    <ShieldCheck data-icon="inline-start" />
+                    Make admin
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      memberMutation.isPending ||
+                      member.role === "MEMBER" ||
+                      member.user.id === currentUser.id
+                    }
+                    onClick={() =>
+                      memberMutation.mutate({
+                        email: member.user.email as string,
+                        role: "MEMBER",
+                      })
+                    }
+                  >
+                    <ShieldOff data-icon="inline-start" />
+                    Make member
+                  </Button>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         ))}
       </div>
     </div>
+  );
+}
+
+function AdminRequestsPanel({
+  requests,
+  isLoading,
+  onReview,
+  isReviewing,
+}: {
+  requests: DashboardAdminRequest[];
+  isLoading: boolean;
+  onReview: (requestId: string, status: "APPROVED" | "REJECTED") => void;
+  isReviewing: boolean;
+}) {
+  const pendingRequests = requests.filter((request) => request.status === "PENDING");
+
+  return (
+    <Card className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Crown />
+          Admin requests
+        </CardTitle>
+        <CardDescription>Approve or reject teammates asking for admin access.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {isLoading ? (
+          <div className="rounded-xl border border-dashed border-border bg-background/35 p-4 text-sm text-muted-foreground">
+            Loading requests...
+          </div>
+        ) : null}
+        {pendingRequests.map((request) => (
+          <div
+            key={request.id}
+            className="flex flex-col gap-3 rounded-xl border border-border bg-background/45 p-3 md:flex-row md:items-center md:justify-between"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">
+                {request.user.name ?? request.user.email}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {request.message || "No reason provided"}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={isReviewing}
+                onClick={() => onReview(request.id, "APPROVED")}
+              >
+                <ShieldCheck data-icon="inline-start" />
+                Approve
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={isReviewing}
+                onClick={() => onReview(request.id, "REJECTED")}
+              >
+                <ShieldOff data-icon="inline-start" />
+                Reject
+              </Button>
+            </div>
+          </div>
+        ))}
+        {!isLoading && !pendingRequests.length ? (
+          <div className="rounded-xl border border-dashed border-border bg-background/35 p-4 text-sm text-muted-foreground">
+            No pending admin requests.
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1615,15 +1864,49 @@ function TaskDialog({
 function MemberDialog({
   open,
   onOpenChange,
+  projectName,
   onSubmit,
   isPending,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  projectName: string;
   onSubmit: (payload: { email: string; role: "ADMIN" | "MEMBER" }) => void;
   isPending: boolean;
 }) {
   const [role, setRole] = useState<"ADMIN" | "MEMBER">("MEMBER");
+  const [email, setEmail] = useState("");
+
+  function openManualMailDraft() {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      toast.error("Enter an email first");
+      return;
+    }
+
+    const registerUrl = `${window.location.origin}/register?email=${encodeURIComponent(normalizedEmail)}`;
+    const subject = `Invitation to ${projectName}`;
+    const body = [
+      "Hi,",
+      "",
+      `I am inviting you to join ${projectName} on Ethara Teams as ${role}.`,
+      "",
+      `Create your account here: ${registerUrl}`,
+      "",
+      "After you sign up, reply to this email so I can add your account to the team.",
+      "",
+      "Thanks",
+    ].join("\n");
+    const gmailUrl = new URL("https://mail.google.com/mail/");
+    gmailUrl.searchParams.set("view", "cm");
+    gmailUrl.searchParams.set("fs", "1");
+    gmailUrl.searchParams.set("to", normalizedEmail);
+    gmailUrl.searchParams.set("su", subject);
+    gmailUrl.searchParams.set("body", body);
+
+    window.open(gmailUrl.toString(), "_blank", "noopener,noreferrer");
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1633,9 +1916,9 @@ function MemberDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add team member</DialogTitle>
+          <DialogTitle>Add existing member</DialogTitle>
           <DialogDescription>
-            Invite by email or update an existing user. Admin role requires a global Admin.
+            Update an existing account, or open a prefilled email draft for someone new.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -1652,7 +1935,14 @@ function MemberDialog({
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="member-email">Email</FieldLabel>
-              <Input id="member-email" name="email" type="email" required />
+              <Input
+                id="member-email"
+                name="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
             </Field>
             <Field>
               <FieldLabel>Role</FieldLabel>
@@ -1668,9 +1958,20 @@ function MemberDialog({
               </select>
             </Field>
           </FieldGroup>
-          <Button type="submit" disabled={isPending}>
-            Send invite
-          </Button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button type="submit" disabled={isPending}>
+              <ShieldCheck data-icon="inline-start" />
+              Add existing user
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={openManualMailDraft}
+            >
+              <Mail data-icon="inline-start" />
+              Open mail draft
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

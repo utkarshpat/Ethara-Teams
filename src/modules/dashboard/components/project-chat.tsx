@@ -254,6 +254,14 @@ export function ProjectChat({
       : trimmed;
   }
 
+  function sendMessage() {
+    if (!body.trim() || !projectId || messageMutation.isPending) {
+      return;
+    }
+
+    messageMutation.mutate(buildMessageBody());
+  }
+
   const mentionHint = members
     .map((member) => mentionValue(member.user))
     .slice(0, 3)
@@ -438,10 +446,7 @@ export function ProjectChat({
           className="rounded-2xl border border-border bg-background/55 p-3 shadow-inner"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!body.trim() || !projectId) {
-              return;
-            }
-            messageMutation.mutate(buildMessageBody());
+            sendMessage();
           }}
         >
           {replyTo ? (
@@ -471,6 +476,12 @@ export function ProjectChat({
               setCursor(event.target.selectionStart);
             }}
             onKeyUp={(event) => setCursor(event.currentTarget.selectionStart)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+              }
+            }}
             onClick={(event) => setCursor(event.currentTarget.selectionStart)}
             placeholder={`Message project. Use ${mentionHint || "@username"} and #task-title`}
             rows={3}

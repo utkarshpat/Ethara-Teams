@@ -53,7 +53,7 @@ export async function createInvitation(input: CreateInvitationInput) {
   const registerUrl = appUrl(`/register?email=${encodeURIComponent(email)}`);
   const projectName = invitation.project?.name ?? "Ethara Teams";
 
-  await sendEmail({
+  const delivery = await sendEmail({
     to: email,
     subject: `Invitation to ${projectName}`,
     text: `You have been invited to ${projectName} as ${input.role}. Create your account here: ${registerUrl}`,
@@ -68,7 +68,10 @@ export async function createInvitation(input: CreateInvitationInput) {
     invitedById: input.invitedById,
   });
 
-  return invitation;
+  return {
+    ...invitation,
+    emailSent: delivery.sent,
+  };
 }
 
 export async function applyPendingInvitations(email: string, userId: string) {
@@ -79,6 +82,14 @@ export async function applyPendingInvitations(email: string, userId: string) {
       acceptedAt: null,
       expiresAt: {
         gt: new Date(),
+      },
+    },
+    include: {
+      project: {
+        select: {
+          id: true,
+          name: true,
+        },
       },
     },
   });
@@ -138,6 +149,22 @@ export async function applyPendingInvitations(email: string, userId: string) {
     count: invitations.length,
     promoted,
   });
+
+  await Promise.all(
+    invitations
+      .filter((invitation) => invitation.projectId)
+      .map((invitation) =>
+        prisma.notification.create({
+          data: {
+            userId,
+            type: "ASSIGNMENT",
+            title: "Project invitation accepted",
+            body: `You now have ${invitation.role} access to ${invitation.project?.name ?? "a project"}`,
+            link: `/dashboard?projectId=${invitation.projectId}`,
+          },
+        }),
+      ),
+  );
 
   return { applied: invitations.length, promoted };
 }
