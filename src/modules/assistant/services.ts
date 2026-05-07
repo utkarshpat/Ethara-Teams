@@ -10,123 +10,133 @@ type AssistantChatResult = {
   summary: string | null;
 };
 
-type GeminiPart = {
-  text?: string;
-  thoughtSignature?: string;
-  thought_signature?: string;
-  functionCall?: {
+type OpenRouterToolCall = {
+  id: string;
+  type: "function";
+  function: {
     name: string;
-    args?: Record<string, unknown>;
-  };
-  functionResponse?: {
-    name: string;
-    response: Record<string, unknown>;
+    arguments: string;
   };
 };
 
-type GeminiContent = {
-  role: "user" | "model" | "function";
-  parts: GeminiPart[];
+type OpenRouterMessage = {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  tool_call_id?: string;
+  tool_calls?: OpenRouterToolCall[];
 };
 
-type GeminiResponse = {
-  candidates?: Array<{
-    content?: {
-      parts?: GeminiPart[];
+type OpenRouterResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+      tool_calls?: OpenRouterToolCall[];
     };
   }>;
+  error?: {
+    message?: string;
+  };
 };
 
 const RECENT_MESSAGE_LIMIT = 12;
 const SUMMARY_THRESHOLD = 24;
 
-function geminiModel() {
-  return process.env.GEMINI_MODEL || "gemini-3.1-flash-lite-preview";
+function assistantModel() {
+  return (
+    process.env.OPENROUTER_MODEL ||
+    process.env.GEMINI_MODEL ||
+    "google/gemini-3.1-flash-lite-preview"
+  );
 }
 
-async function callGemini(
-  contents: GeminiContent[],
+const assistantTools = [
+  {
+    type: "function",
+    function: {
+      name: "create_task",
+      description: "Create a task in one of the user's accessible projects.",
+      parameters: {
+        type: "object",
+        properties: {
+          projectId: { type: "string" },
+          projectName: { type: "string" },
+          title: { type: "string" },
+          description: { type: "string" },
+          priority: {
+            type: "string",
+            enum: ["LOW", "MEDIUM", "HIGH", "URGENT"],
+          },
+          dueDate: {
+            type: "string",
+            description: "ISO datetime if the user gave a due date.",
+          },
+          assignedEmail: { type: "string" },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_calendar_event",
+      description: "Create a calendar event or meeting for the current user.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          notes: { type: "string" },
+          startAt: { type: "string", description: "ISO datetime" },
+          endAt: { type: "string", description: "ISO datetime" },
+          createGoogleMeet: { type: "boolean" },
+        },
+        required: ["title", "startAt", "endAt"],
+      },
+    },
+  },
+] as const;
+
+async function callOpenRouter(
+  messages: OpenRouterMessage[],
   systemInstruction: string,
   tools = true,
 ) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {
-    throw new AppError("Gemini is not configured. Add GEMINI_API_KEY.", 503);
+    throw new AppError("OpenRouter is not configured. Add OPENROUTER_API_KEY.", 503);
   }
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel()}:generateContent?key=${apiKey}`,
+    "https://openrouter.ai/api/v1/chat/completions",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXTAUTH_URL ?? "http://localhost:3000",
+        "X-Title": "Ethara Teams",
+      },
       body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemInstruction }],
-        },
-        contents,
-        tools: tools
-          ? [
-              {
-                functionDeclarations: [
-                  {
-                    name: "create_task",
-                    description:
-                      "Create a task in one of the user's accessible projects.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        projectId: { type: "STRING" },
-                        projectName: { type: "STRING" },
-                        title: { type: "STRING" },
-                        description: { type: "STRING" },
-                        priority: {
-                          type: "STRING",
-                          enum: ["LOW", "MEDIUM", "HIGH", "URGENT"],
-                        },
-                        dueDate: {
-                          type: "STRING",
-                          description: "ISO datetime if the user gave a due date.",
-                        },
-                        assignedEmail: { type: "STRING" },
-                      },
-                      required: ["title"],
-                    },
-                  },
-                  {
-                    name: "create_calendar_event",
-                    description:
-                      "Create a calendar event or meeting for the current user.",
-                    parameters: {
-                      type: "OBJECT",
-                      properties: {
-                        title: { type: "STRING" },
-                        notes: { type: "STRING" },
-                        startAt: { type: "STRING", description: "ISO datetime" },
-                        endAt: { type: "STRING", description: "ISO datetime" },
-                        createGoogleMeet: { type: "BOOLEAN" },
-                      },
-                      required: ["title", "startAt", "endAt"],
-                    },
-                  },
-                ],
-              },
-            ]
-          : undefined,
+        model: assistantModel(),
+        messages: [{ role: "system", content: systemInstruction }, ...messages],
+        tools: tools ? assistantTools : undefined,
+        tool_choice: tools ? "auto" : undefined,
+        parallel_tool_calls: false,
+        max_tokens: 1800,
+        temperature: 0.4,
       }),
     },
   );
 
-  const payload = (await response.json().catch(() => ({}))) as GeminiResponse & {
-    error?: { message?: string };
-  };
+  const payload = (await response.json().catch(() => ({}))) as OpenRouterResponse;
 
   if (!response.ok) {
-    logger.error("assistant.gemini_failed", {
+    logger.error("assistant.openrouter_failed", {
       status: response.status,
       error: payload.error?.message,
     });
-    throw new AppError(payload.error?.message ?? "Gemini request failed", 502);
+    throw new AppError(payload.error?.message ?? "OpenRouter request failed", 502);
   }
 
   return payload;
@@ -216,26 +226,19 @@ async function getConversation(userId: string) {
   });
 }
 
-function messageContent(message: { role: string; content: string }): GeminiContent {
+function messageContent(message: { role: string; content: string }): OpenRouterMessage {
   return {
-    role: message.role === "assistant" ? "model" : "user",
-    parts: [{ text: message.content }],
+    role: message.role === "assistant" ? "assistant" : "user",
+    content: message.content,
   };
 }
 
-function textFromResponse(response: GeminiResponse) {
-  return (
-    response.candidates?.[0]?.content?.parts
-      ?.map((part) => part.text)
-      .filter(Boolean)
-      .join("\n")
-      .trim() || "I could not generate a response."
-  );
+function textFromResponse(response: OpenRouterResponse) {
+  return response.choices?.[0]?.message?.content?.trim() || "I could not generate a response.";
 }
 
-function functionCallFromResponse(response: GeminiResponse) {
-  return response.candidates?.[0]?.content?.parts?.find((part) => part.functionCall)
-    ?.functionCall;
+function toolCallFromResponse(response: OpenRouterResponse) {
+  return response.choices?.[0]?.message?.tool_calls?.[0] ?? null;
 }
 
 function stringArg(args: Record<string, unknown> | undefined, key: string) {
@@ -243,9 +246,17 @@ function stringArg(args: Record<string, unknown> | undefined, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-async function executeTool(userId: string, call: NonNullable<ReturnType<typeof functionCallFromResponse>>) {
-  if (call.name === "create_task") {
-    const args = call.args ?? {};
+function parseToolArgs(toolCall: OpenRouterToolCall) {
+  try {
+    return JSON.parse(toolCall.function.arguments || "{}") as Record<string, unknown>;
+  } catch {
+    throw new AppError("Assistant tool arguments were invalid", 400);
+  }
+}
+
+async function executeTool(userId: string, call: OpenRouterToolCall) {
+  if (call.function.name === "create_task") {
+    const args = parseToolArgs(call);
     const projectIdArg = stringArg(args, "projectId");
     const projectName = stringArg(args, "projectName").toLowerCase();
     const title = stringArg(args, "title");
@@ -298,8 +309,8 @@ async function executeTool(userId: string, call: NonNullable<ReturnType<typeof f
     };
   }
 
-  if (call.name === "create_calendar_event") {
-    const args = call.args ?? {};
+  if (call.function.name === "create_calendar_event") {
+    const args = parseToolArgs(call);
     const event = await createCalendarEvent(userId, {
       title: stringArg(args, "title"),
       notes: stringArg(args, "notes"),
@@ -343,11 +354,11 @@ async function summarizeIfNeeded(conversationId: string) {
   let summary = transcript.slice(0, 3000);
 
   try {
-    const response = await callGemini(
+    const response = await callOpenRouter(
       [
         {
           role: "user",
-          parts: [{ text: transcript }],
+          content: transcript,
         },
       ],
       "Summarize this assistant conversation into durable user preferences, decisions, unresolved tasks, and created actions. Keep it under 1200 characters.",
@@ -404,33 +415,25 @@ export async function chatWithAssistant(
     .join("\n\n");
 
   const contents = recentMessages.reverse().map(messageContent);
-  const firstResponse = await callGemini(contents, systemInstruction);
-  const functionCall = functionCallFromResponse(firstResponse);
+  const firstResponse = await callOpenRouter(contents, systemInstruction);
+  const toolCall = toolCallFromResponse(firstResponse);
 
   let reply = textFromResponse(firstResponse);
 
-  if (functionCall) {
-    const result = await executeTool(userId, functionCall);
-    const modelParts = firstResponse.candidates?.[0]?.content?.parts ?? [
-      { functionCall },
-    ];
-    const secondResponse = await callGemini(
+  if (toolCall) {
+    const result = await executeTool(userId, toolCall);
+    const secondResponse = await callOpenRouter(
       [
         ...contents,
         {
-          role: "model",
-          parts: modelParts,
+          role: "assistant",
+          content: firstResponse.choices?.[0]?.message?.content ?? null,
+          tool_calls: [toolCall],
         },
         {
-          role: "function",
-          parts: [
-            {
-              functionResponse: {
-                name: functionCall.name,
-                response: result,
-              },
-            },
-          ],
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(result),
         },
       ],
       systemInstruction,
