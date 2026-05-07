@@ -16,13 +16,6 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -93,6 +86,30 @@ function eventDuration(event: DashboardCalendarEvent) {
   return Math.max(15, Math.round((end - start) / 60000));
 }
 
+function reminderLabel(minutes: number | null) {
+  if (minutes === null) {
+    return "No reminder";
+  }
+
+  if (minutes === 0) {
+    return "At start";
+  }
+
+  if (minutes < 60) {
+    return `${minutes} min before`;
+  }
+
+  if (minutes === 60) {
+    return "1 hour before";
+  }
+
+  if (minutes === 1440) {
+    return "1 day before";
+  }
+
+  return `${minutes} min before`;
+}
+
 function hourEvents(events: DashboardCalendarEvent[], hour: number) {
   return events.filter((event) => new Date(event.startAt).getHours() === hour);
 }
@@ -129,6 +146,11 @@ export function CalendarPanel() {
 
   const events = eventsQuery.data ?? [];
   const upcoming = events.filter((event) => event.status === "SCHEDULED").slice(0, 4);
+  const scheduledCount = events.filter((event) => event.status === "SCHEDULED").length;
+  const completedCount = events.filter((event) => event.status === "COMPLETED").length;
+  const focusMinutes = events
+    .filter((event) => event.type === "FOCUS")
+    .reduce((total, event) => total + eventDuration(event), 0);
 
   const createMutation = useMutation({
     mutationFn: (payload: {
@@ -180,108 +202,179 @@ export function CalendarPanel() {
   });
 
   return (
-    <Card className="rounded-2xl border border-border bg-card/40 backdrop-blur-xl shadow-sm">
-      <CardHeader className="flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle>Calendar</CardTitle>
-            <CardDescription>Meetings, reminders, and daily sync windows</CardDescription>
+    <div className="grid gap-4">
+      <div className="rounded-2xl border border-border bg-card/45 p-4 shadow-sm backdrop-blur-xl">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold tracking-normal">Daily schedule</h3>
+            <p className="text-sm text-muted-foreground">
+              Meetings, reminders, focus blocks, and sync windows for the selected day.
+            </p>
           </div>
-          <CalendarEventDialog
-            open={isDialogOpen}
-            onOpenChange={setDialogOpen}
-            selectedDate={selectedDate}
-            onSubmit={(payload) => createMutation.mutate(payload)}
-            isPending={createMutation.isPending}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              className="w-[170px]"
+              type="date"
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSelectedDate(dateInputValue(new Date()))}
+            >
+              Today
+            </Button>
+            <CalendarEventDialog
+              open={isDialogOpen}
+              onOpenChange={setDialogOpen}
+              selectedDate={selectedDate}
+              onSubmit={(payload) => createMutation.mutate(payload)}
+              isPending={createMutation.isPending}
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Input
-            type="date"
-            value={selectedDate}
-            onChange={(event) => setSelectedDate(event.target.value)}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setSelectedDate(dateInputValue(new Date()))}
-          >
-            Today
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="grid gap-3 rounded-xl border border-border bg-muted/40 p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">Upcoming today</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <CalendarStat label="Scheduled" value={scheduledCount} tone="primary" />
+        <CalendarStat label="Completed" value={completedCount} tone="success" />
+        <CalendarStat label="Focus minutes" value={focusMinutes} tone="cyan" />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <section className="rounded-2xl border border-border bg-card/45 p-4 shadow-sm backdrop-blur-xl">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold tracking-normal">Agenda</h3>
+              <p className="text-sm text-muted-foreground">Upcoming for this day</p>
+            </div>
             <Badge variant="outline">{events.length} events</Badge>
           </div>
-          {upcoming.length ? (
-            upcoming.map((event) => (
-              <CalendarEventRow
-                key={event.id}
-                event={event}
-                onComplete={() =>
-                  updateMutation.mutate({ id: event.id, status: "COMPLETED" })
-                }
-                onCancel={() =>
-                  updateMutation.mutate({ id: event.id, status: "CANCELLED" })
-                }
-                onDelete={() => deleteMutation.mutate(event.id)}
-              />
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">No scheduled events for this day.</p>
-          )}
-        </div>
-
-        <ScrollArea className="h-[520px] rounded-xl border border-border bg-card/20 shadow-inner">
-          <div className="divide-y divide-border/50">
-            {Array.from({ length: 24 }, (_, hour) => {
-              const items = hourEvents(events, hour);
-
-              return (
-                <div key={hour} className="grid min-h-20 grid-cols-[64px_1fr]">
-                  <div className="border-r border-border/50 px-3 py-3 text-xs text-muted-foreground">
-                    {String(hour).padStart(2, "0")}:00
-                  </div>
-                  <div className="flex flex-col gap-2 p-2">
-                    {items.length ? (
-                      items.map((event) => (
-                        <div
-                          key={event.id}
-                          className={cn(
-                            "rounded-md border px-3 py-2",
-                            eventTone(event.type),
-                            event.status !== "SCHEDULED" && "opacity-60",
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-sm font-medium">{event.title}</p>
-                            <Badge variant="outline">{event.type}</Badge>
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {timeLabel(event.startAt)} - {timeLabel(event.endAt)} / {eventDuration(event)} min
-                          </p>
-                          {event.location ? (
-                            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                              <MapPin />
-                              {event.location}
-                            </p>
-                          ) : null}
-                        </div>
-                      ))
-                    ) : (
-                      <span className="py-2 text-xs text-muted-foreground/60">Available</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="grid gap-3">
+            {upcoming.length ? (
+              upcoming.map((event) => (
+                <CalendarEventRow
+                  key={event.id}
+                  event={event}
+                  onComplete={() =>
+                    updateMutation.mutate({ id: event.id, status: "COMPLETED" })
+                  }
+                  onCancel={() =>
+                    updateMutation.mutate({ id: event.id, status: "CANCELLED" })
+                  }
+                  onDelete={() => deleteMutation.mutate(event.id)}
+                />
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-border bg-background/35 p-6 text-center">
+                <CalendarClock className="mx-auto mb-3 text-muted-foreground" />
+                <p className="text-sm font-medium">No events scheduled</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Create a meeting, reminder, or focus block for this date.
+                </p>
+              </div>
+            )}
           </div>
-        </ScrollArea>
-      </CardContent>
-    </Card>
+        </section>
+
+        <section className="overflow-hidden rounded-2xl border border-border bg-card/45 shadow-sm backdrop-blur-xl">
+          <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
+            <div>
+              <h3 className="text-base font-semibold tracking-normal">Hourly timeline</h3>
+              <p className="text-sm text-muted-foreground">
+                {new Intl.DateTimeFormat("en-IN", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                }).format(start)}
+              </p>
+            </div>
+            <Badge variant="outline">24h</Badge>
+          </div>
+          <ScrollArea className="h-[560px]">
+            <div className="divide-y divide-border/50">
+              {Array.from({ length: 24 }, (_, hour) => {
+                const items = hourEvents(events, hour);
+
+                return (
+                  <div key={hour} className="grid min-h-20 grid-cols-[76px_1fr]">
+                    <div className="border-r border-border/50 px-4 py-4 text-xs text-muted-foreground">
+                      {String(hour).padStart(2, "0")}:00
+                    </div>
+                    <div className="flex flex-col gap-2 p-3">
+                      {items.length ? (
+                        items.map((event) => (
+                          <div
+                            key={event.id}
+                            className={cn(
+                              "rounded-xl border px-3 py-2 shadow-sm",
+                              eventTone(event.type),
+                              event.status !== "SCHEDULED" && "opacity-60",
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium">{event.title}</p>
+                              <Badge variant="outline">{event.type}</Badge>
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {timeLabel(event.startAt)} - {timeLabel(event.endAt)} / {eventDuration(event)} min
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Reminder: {reminderLabel(event.reminderMinutes)}
+                            </p>
+                            {event.location ? (
+                              <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                                <MapPin />
+                                {event.location}
+                              </p>
+                            ) : null}
+                          </div>
+                        ))
+                      ) : (
+                        <span className="py-2 text-xs text-muted-foreground/60">
+                          Available
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function CalendarStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "primary" | "success" | "cyan";
+}) {
+  const toneClass = {
+    primary: "bg-primary/12 text-primary",
+    success: "bg-emerald-400/12 text-emerald-300",
+    cyan: "bg-cyan-400/12 text-cyan-300",
+  }[tone];
+
+  return (
+    <div className="rounded-2xl border border-border bg-card/45 p-4 shadow-sm backdrop-blur-xl">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </p>
+      <div className="mt-3 flex items-center justify-between">
+        <p className="text-2xl font-semibold tracking-normal">{value}</p>
+        <div className={cn("grid size-9 place-items-center rounded-xl", toneClass)}>
+          <CalendarClock />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -304,6 +397,9 @@ function CalendarEventRow({
           <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
             <Clock3 />
             {timeLabel(event.startAt)} - {timeLabel(event.endAt)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Reminder: {reminderLabel(event.reminderMinutes)}
           </p>
         </div>
         <Badge variant="outline">{event.status}</Badge>
@@ -350,42 +446,84 @@ function CalendarEventDialog({
     const hour = Math.max(9, now.getHours() + 1);
     return new Date(year, month - 1, day, hour, 0, 0);
   }, [selectedDate]);
+  const endDefault = useMemo(
+    () => new Date(startDefault.getTime() + 30 * 60000),
+    [startDefault],
+  );
   const [type, setType] = useState<CalendarEventType>("MEETING");
   const [reminder, setReminder] = useState("10");
+  const [startValue, setStartValue] = useState(dateTimeInputValue(startDefault));
+  const [endValue, setEndValue] = useState(dateTimeInputValue(endDefault));
+
+  function resetDefaults() {
+    setStartValue(dateTimeInputValue(startDefault));
+    setEndValue(dateTimeInputValue(endDefault));
+  }
+
+  function handleStartChange(value: string) {
+    setStartValue(value);
+
+    const nextStart = new Date(value);
+    const currentEnd = new Date(endValue);
+
+    if (!value || Number.isNaN(nextStart.getTime())) {
+      return;
+    }
+
+    if (!endValue || Number.isNaN(currentEnd.getTime()) || currentEnd <= nextStart) {
+      setEndValue(dateTimeInputValue(new Date(nextStart.getTime() + 30 * 60000)));
+    }
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          resetDefaults();
+        }
+
+        onOpenChange(nextOpen);
+      }}
+    >
       <DialogTrigger render={<Button size="sm" />}>
         <Plus data-icon="inline-start" />
         New event
       </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-hidden p-0 sm:max-w-lg">
+        <DialogHeader className="border-b border-border/70 px-5 pb-4 pt-5">
           <DialogTitle>Create calendar event</DialogTitle>
           <DialogDescription>
             Block time for meetings, reminders, focus work, or team syncs.
           </DialogDescription>
         </DialogHeader>
         <form
-          className="flex flex-col gap-4"
+          className="flex max-h-[calc(100dvh-8rem)] flex-col overflow-y-auto px-5 pb-5 pt-4"
           onSubmit={(event) => {
             event.preventDefault();
             const formData = new FormData(event.currentTarget);
             const reminderMinutes =
               reminder === "none" ? null : Number.parseInt(reminder, 10);
+            const startAt = new Date(startValue);
+            const endAt = new Date(endValue);
+
+            if (endAt <= startAt) {
+              toast.error("End time must be after start time");
+              return;
+            }
 
             onSubmit({
               title: String(formData.get("title") ?? ""),
               notes: String(formData.get("notes") ?? ""),
               location: String(formData.get("location") ?? ""),
               type,
-              startAt: new Date(String(formData.get("startAt") ?? "")).toISOString(),
-              endAt: new Date(String(formData.get("endAt") ?? "")).toISOString(),
+              startAt: startAt.toISOString(),
+              endAt: endAt.toISOString(),
               reminderMinutes,
             });
           }}
         >
-          <FieldGroup>
+          <FieldGroup className="gap-4">
             <Field>
               <FieldLabel htmlFor="calendar-title">Title</FieldLabel>
               <Input id="calendar-title" name="title" required />
@@ -410,7 +548,8 @@ function CalendarEventDialog({
                 id="calendar-start"
                 name="startAt"
                 type="datetime-local"
-                defaultValue={dateTimeInputValue(startDefault)}
+                value={startValue}
+                onChange={(event) => handleStartChange(event.target.value)}
                 required
               />
             </Field>
@@ -420,9 +559,9 @@ function CalendarEventDialog({
                 id="calendar-end"
                 name="endAt"
                 type="datetime-local"
-                defaultValue={dateTimeInputValue(
-                  new Date(startDefault.getTime() + 30 * 60000),
-                )}
+                min={startValue}
+                value={endValue}
+                onChange={(event) => setEndValue(event.target.value)}
                 required
               />
             </Field>

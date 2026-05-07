@@ -112,7 +112,7 @@ export function KanbanBoard({
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <div className="overflow-x-auto pb-2">
-        <div className="grid min-h-[620px] min-w-[1080px] grid-cols-4 gap-4">
+        <div className="grid min-h-[620px] min-w-[920px] grid-cols-4 gap-3 xl:gap-4">
           {columns.map((column) => {
             const columnTasks = tasks
               .filter((task) => task.status === column.id)
@@ -125,7 +125,7 @@ export function KanbanBoard({
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                     className={cn(
-                      "flex min-h-[340px] flex-col gap-3 rounded-2xl border border-border border-t-[3px] bg-card/20 p-4 backdrop-blur-md transition-all",
+                      "flex min-h-[340px] flex-col gap-3 rounded-2xl border border-border border-t-[3px] bg-card/20 p-3 backdrop-blur-md transition-all xl:p-4",
                       column.accent,
                       snapshot.isDraggingOver && "bg-primary/5 ring-2 ring-primary/40",
                     )}

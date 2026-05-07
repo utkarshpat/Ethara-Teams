@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useRef } from "react";
 import { io, type Socket } from "socket.io-client";
 
+export type PresenceViewer = {
+  userId: string;
+  email?: string | null;
+  name?: string | null;
+  image?: string | null;
+};
+
 let socketClient: Socket | null = null;
 let activeSubscribers = 0;
 let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -15,9 +22,12 @@ function getSocket() {
       path: "/api/socket",
       withCredentials: true,
       autoConnect: false,
-      transports: ["websocket"],
-      timeout: 8000,
-      reconnectionAttempts: 5,
+      transports: ["websocket", "polling"],
+      tryAllTransports: true,
+      timeout: 5000,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 300,
+      reconnectionDelayMax: 2000,
     });
   }
 

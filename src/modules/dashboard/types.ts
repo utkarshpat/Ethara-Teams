@@ -17,7 +17,7 @@ export type DashboardView =
   | "chat"
   | "reports"
   | "team"
-  | "settings";
+  | "trash";
 
 export type DashboardMember = {
   id: string;
@@ -103,4 +103,35 @@ export type DashboardCalendarEvent = {
   endAt: string;
   reminderMinutes: number | null;
   userId: string;
+};
+
+export type DashboardTrashProject = {
+  id: string;
+  name: string;
+  description: string | null;
+  deletedAt: string | null;
+  taskCount: number;
+  memberCount: number;
+  canRestore: boolean;
+};
+
+export type DashboardTrashTask = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  priority: Priority;
+  dueDate: string | null;
+  deletedAt: string | null;
+  projectId: string;
+  projectName: string;
+  projectDeletedAt: string | null;
+  assignedTo: DashboardUser | null;
+  commentsCount: number;
+  canRestore: boolean;
+};
+
+export type DashboardTrash = {
+  projects: DashboardTrashProject[];
+  tasks: DashboardTrashTask[];
 };

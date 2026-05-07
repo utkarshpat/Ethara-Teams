@@ -9,6 +9,7 @@ type AuthedSocketData = {
   userId: string;
   email?: string | null;
   name?: string | null;
+  image?: string | null;
 };
 
 export function attachRealtimeServer(httpServer: HttpServer) {
@@ -37,6 +38,7 @@ export function attachRealtimeServer(httpServer: HttpServer) {
         userId: token.sub,
         email: token.email,
         name: token.name,
+        image: typeof token.picture === "string" ? token.picture : null,
       } satisfies AuthedSocketData;
       next();
     } catch (error) {
@@ -73,11 +75,7 @@ export function attachRealtimeServer(httpServer: HttpServer) {
       try {
         await ensureTaskAccess(user.userId, taskId);
         await socket.join(taskRoom(taskId));
-        const sockets = await io.in(taskRoom(taskId)).fetchSockets();
-        io.to(taskRoom(taskId)).emit("presence:updated", {
-          taskId,
-          viewers: sockets.map((viewer) => viewer.data.user),
-        });
+        await emitTaskPresence(io, taskId);
         logger.info("realtime.task_joined", {
           socketId: socket.id,
           userId: user.userId,
@@ -100,9 +98,37 @@ export function attachRealtimeServer(httpServer: HttpServer) {
         reason,
       });
     });
+
+    socket.on("disconnecting", () => {
+      const taskIds = [...socket.rooms]
+        .filter((room) => room.startsWith("task:"))
+        .map((room) => room.slice("task:".length));
+
+      setTimeout(() => {
+        void Promise.all(taskIds.map((taskId) => emitTaskPresence(io, taskId)));
+      }, 0);
+    });
   });
 
   setRealtimeServer(io);
   logger.info("realtime.server_ready");
   return io;
+}
+
+async function emitTaskPresence(io: Server, taskId: string) {
+  const sockets = await io.in(taskRoom(taskId)).fetchSockets();
+  const uniqueViewers = new Map<string, AuthedSocketData>();
+
+  sockets.forEach((viewer) => {
+    const viewerUser = viewer.data.user as AuthedSocketData | undefined;
+
+    if (viewerUser?.userId) {
+      uniqueViewers.set(viewerUser.userId, viewerUser);
+    }
+  });
+
+  io.to(taskRoom(taskId)).emit("presence:updated", {
+    taskId,
+    viewers: [...uniqueViewers.values()],
+  });
 }

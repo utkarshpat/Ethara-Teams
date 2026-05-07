@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, requireApiUser } from "@/lib/api";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import {
   listProjectTasks,
   softDeleteTask,
@@ -32,6 +33,12 @@ type TaskRouteContext = {
 export async function PATCH(request: Request, context: TaskRouteContext) {
   try {
     const user = await requireApiUser();
+    enforceRateLimit(request, {
+      scope: "tasks:update",
+      userId: user.id,
+      limit: 60,
+      windowMs: 60_000,
+    });
     const { taskId } = await context.params;
     const input = taskUpdateSchema.parse(await request.json());
     const task = await updateTask(user.id, taskId, input);

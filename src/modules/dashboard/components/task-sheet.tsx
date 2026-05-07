@@ -15,11 +15,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { useTaskRealtime } from "@/hooks/use-realtime";
+import { useTaskRealtime, type PresenceViewer } from "@/hooks/use-realtime";
 import type {
   DashboardComment,
   DashboardMember,
   DashboardTask,
+  DashboardUser,
 } from "@/modules/dashboard/types";
 import { useUiStore } from "@/stores/ui-store";
 
@@ -27,6 +28,7 @@ type TaskSheetProps = {
   task: DashboardTask | null;
   members: DashboardMember[];
   tasks: DashboardTask[];
+  currentUser: DashboardUser;
   canManageProject: boolean;
 };
 
@@ -118,6 +120,27 @@ function activeToken(value: string, cursor: number) {
   };
 }
 
+function upsertComment(
+  comments: DashboardComment[] | undefined,
+  comment: DashboardComment,
+  tempId?: string,
+) {
+  const currentComments = comments ?? [];
+  let found = false;
+  const nextComments = currentComments
+    .filter((item) => item.id !== tempId)
+    .map((item) => {
+      if (item.id === comment.id) {
+        found = true;
+        return comment;
+      }
+
+      return item;
+    });
+
+  return found ? nextComments : [...nextComments, comment];
+}
+
 function AdminTaskControls({
   task,
   members,
@@ -191,6 +214,7 @@ export function TaskSheet({
   task,
   members,
   tasks,
+  currentUser,
   canManageProject,
 }: TaskSheetProps) {
   const queryClient = useQueryClient();
@@ -198,14 +222,40 @@ export function TaskSheet({
   const setSelectedTaskId = useUiStore((state) => state.setSelectedTaskId);
   const [body, setBody] = useState("");
   const [cursor, setCursor] = useState(0);
+  const [presenceState, setPresenceState] = useState<{
+    taskId: string | null;
+    viewers: PresenceViewer[];
+  }>({ taskId: null, viewers: [] });
+
   useTaskRealtime(task?.id ?? null, {
-    "comment:created": () => {
+    "comment:created": (payload) => {
       if (!task) {
         return;
       }
 
-      queryClient.invalidateQueries({ queryKey: ["comments", task.id] });
+      const comment = payload as DashboardComment;
+      queryClient.setQueryData<DashboardComment[]>(
+        ["comments", task.id],
+        (current) => upsertComment(current, comment),
+      );
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    "presence:updated": (payload) => {
+      if (!task) {
+        return;
+      }
+
+      const presence = payload as {
+        taskId?: string;
+        viewers?: PresenceViewer[];
+      };
+
+      if (presence.taskId === task.id) {
+        setPresenceState({
+          taskId: task.id,
+          viewers: presence.viewers ?? [],
+        });
+      }
     },
   });
 
@@ -216,14 +266,53 @@ export function TaskSheet({
   });
 
   const commentMutation = useMutation({
-    mutationFn: () => postComment(task?.id ?? "", body),
-    onSuccess: () => {
+    mutationFn: (messageBody: string) => postComment(task?.id ?? "", messageBody),
+    onMutate: async (messageBody) => {
+      if (!task) {
+        return null;
+      }
+
+      await queryClient.cancelQueries({ queryKey: ["comments", task.id] });
+      const previous = queryClient.getQueryData<DashboardComment[]>([
+        "comments",
+        task.id,
+      ]);
+      const tempId = `temp-${crypto.randomUUID()}`;
+      const optimisticComment: DashboardComment = {
+        id: tempId,
+        body: messageBody,
+        taskId: task.id,
+        createdAt: new Date().toISOString(),
+        user: currentUser,
+        referencedTasks: [],
+      };
+
       setBody("");
-      queryClient.invalidateQueries({ queryKey: ["comments", task?.id] });
+      queryClient.setQueryData<DashboardComment[]>(
+        ["comments", task.id],
+        (current) => upsertComment(current, optimisticComment),
+      );
+
+      return { previous, tempId, messageBody };
+    },
+    onSuccess: (comment, _messageBody, context) => {
+      if (task) {
+        queryClient.setQueryData<DashboardComment[]>(
+          ["comments", task.id],
+          (current) => upsertComment(current, comment, context?.tempId),
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["tasks", task?.projectId] });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
-    onError: () => toast.error("Comment could not be posted"),
+    onError: (_error, _messageBody, context) => {
+      if (task && context?.previous) {
+        queryClient.setQueryData(["comments", task.id], context.previous);
+      }
+
+      setBody(context?.messageBody ?? "");
+      toast.error("Comment could not be posted");
+    },
   });
 
   const taskMutation = useMutation({
@@ -284,14 +373,23 @@ export function TaskSheet({
         }
       }}
     >
-      <SheetContent className="flex w-full flex-col gap-5 overflow-y-auto sm:max-w-xl">
+      <SheetContent className="flex w-full flex-col gap-5 overflow-y-auto data-[side=right]:sm:inset-y-4 data-[side=right]:sm:right-4 data-[side=right]:sm:h-[calc(100vh-2rem)] sm:max-w-[560px] sm:rounded-2xl sm:border">
         {task ? (
           <>
             <SheetHeader>
-              <SheetTitle>{task.title}</SheetTitle>
-              <SheetDescription>
-                {task.description ?? "No description has been added yet."}
-              </SheetDescription>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <SheetTitle>{task.title}</SheetTitle>
+                  <SheetDescription>
+                    {task.description ?? "No description has been added yet."}
+                  </SheetDescription>
+                </div>
+                <PresenceGlow
+                  viewers={
+                    presenceState.taskId === task.id ? presenceState.viewers : []
+                  }
+                />
+              </div>
             </SheetHeader>
             <div className="grid gap-3 rounded-md border border-white/10 bg-[#11182766] p-4 text-sm backdrop-blur-xl">
               <div className="flex items-center justify-between gap-4">
@@ -383,7 +481,7 @@ export function TaskSheet({
                 if (!body.trim()) {
                   return;
                 }
-                commentMutation.mutate();
+                commentMutation.mutate(body.trim());
               }}
             >
               <Textarea
@@ -423,5 +521,34 @@ export function TaskSheet({
         ) : null}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function PresenceGlow({ viewers }: { viewers: PresenceViewer[] }) {
+  const visibleViewers = viewers.slice(0, 4);
+
+  return (
+    <div className="flex min-w-[128px] items-center justify-end gap-2 rounded-xl border border-white/10 bg-[#11182766] px-3 py-2 backdrop-blur-xl">
+      <span className="relative flex size-2">
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-70" />
+        <span className="relative inline-flex size-2 rounded-full bg-primary shadow-[0_0_18px_rgba(255,0,255,0.8)]" />
+      </span>
+      <div className="flex -space-x-2">
+        {visibleViewers.map((viewer) => (
+          <Avatar
+            key={viewer.userId}
+            className="size-7 border border-primary/50 shadow-[0_0_18px_rgba(255,0,255,0.28)]"
+          >
+            <AvatarImage src={viewer.image ?? undefined} />
+            <AvatarFallback>
+              {initials(viewer.name ?? null, viewer.email ?? null)}
+            </AvatarFallback>
+          </Avatar>
+        ))}
+      </div>
+      <span className="text-xs font-medium text-muted-foreground">
+        {viewers.length ? `${viewers.length} live` : "Live"}
+      </span>
+    </div>
   );
 }

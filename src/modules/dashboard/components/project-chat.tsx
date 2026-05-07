@@ -1,7 +1,12 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Hash, MessageCircle, Send } from "lucide-react";
+import {
+  type InfiniteData,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { Hash, MessageCircle, Reply, Send } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -21,22 +26,70 @@ import type {
   DashboardTask,
   DashboardUser,
 } from "@/modules/dashboard/types";
+import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 
 type ProjectChatProps = {
   projectId: string | null;
   members: DashboardMember[];
   tasks: DashboardTask[];
+  currentUserId: string;
 };
 
-async function fetchMessages(projectId: string) {
-  const response = await fetch(`/api/projects/${projectId}/messages`);
+export type ProjectMessagesPage = {
+  items: DashboardProjectMessage[];
+  nextCursor: string | null;
+};
+
+export type ProjectMessagesData = InfiniteData<ProjectMessagesPage, string | null>;
+
+export function upsertProjectMessage(
+  data: ProjectMessagesData | undefined,
+  message: DashboardProjectMessage,
+  tempId?: string,
+): ProjectMessagesData {
+  const pages = data?.pages.length
+    ? [...data.pages]
+    : [{ items: [], nextCursor: null }];
+  const pageParams = data?.pageParams.length ? [...data.pageParams] : [null];
+  let found = false;
+
+  const nextPages = pages.map((page, pageIndex) => {
+    const items = page.items
+      .filter((item) => item.id !== tempId)
+      .map((item) => {
+        if (item.id === message.id) {
+          found = true;
+          return message;
+        }
+
+        return item;
+      });
+
+    if (!found && pageIndex === 0) {
+      return { ...page, items: [...items, message] };
+    }
+
+    return { ...page, items };
+  });
+
+  return { pages: nextPages, pageParams };
+}
+
+async function fetchMessagesPage(projectId: string, cursor?: string | null) {
+  const query = new URLSearchParams({ limit: "20" });
+
+  if (cursor) {
+    query.set("cursor", cursor);
+  }
+
+  const response = await fetch(`/api/projects/${projectId}/messages?${query}`);
 
   if (!response.ok) {
     throw new Error("Could not load project chat");
   }
 
-  return (await response.json()) as DashboardProjectMessage[];
+  return (await response.json()) as ProjectMessagesPage;
 }
 
 async function postMessage(projectId: string, body: string) {
@@ -92,29 +145,114 @@ function activeToken(value: string, cursor: number) {
   };
 }
 
-export function ProjectChat({ projectId, members, tasks }: ProjectChatProps) {
+function splitReply(body: string) {
+  if (!body.startsWith("Reply to ")) {
+    return null;
+  }
+
+  const parts = body.split("\n\n");
+
+  if (parts.length < 2) {
+    return null;
+  }
+
+  return {
+    quote: parts[0].replace(/^Reply to /, ""),
+    body: parts.slice(1).join("\n\n"),
+  };
+}
+
+export function ProjectChat({
+  projectId,
+  members,
+  tasks,
+  currentUserId,
+}: ProjectChatProps) {
   const queryClient = useQueryClient();
   const setSelectedTaskId = useUiStore((state) => state.setSelectedTaskId);
   const [body, setBody] = useState("");
   const [cursor, setCursor] = useState(0);
+  const [replyTo, setReplyTo] = useState<DashboardProjectMessage | null>(null);
 
-  const messagesQuery = useQuery({
+  const messagesQuery = useInfiniteQuery<ProjectMessagesPage>({
     queryKey: ["project-messages", projectId],
-    queryFn: () => fetchMessages(projectId ?? ""),
+    queryFn: ({ pageParam }) =>
+      fetchMessagesPage(projectId ?? "", pageParam as string | null),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: Boolean(projectId),
   });
 
+  const messages =
+    messagesQuery.data?.pages
+      .slice()
+      .reverse()
+      .flatMap((page) => page.items) ?? [];
+
   const messageMutation = useMutation({
-    mutationFn: () => postMessage(projectId ?? "", body),
-    onSuccess: async () => {
+    mutationFn: (messageBody: string) => postMessage(projectId ?? "", messageBody),
+    onMutate: async (messageBody) => {
+      if (!projectId) {
+        return null;
+      }
+
+      await queryClient.cancelQueries({ queryKey: ["project-messages", projectId] });
+
+      const tempId = `temp-${crypto.randomUUID()}`;
+      const previous = queryClient.getQueryData<ProjectMessagesData>([
+        "project-messages",
+        projectId,
+      ]);
+      const optimisticMessage: DashboardProjectMessage = {
+        id: tempId,
+        body: messageBody,
+        projectId,
+        createdAt: new Date().toISOString(),
+        user: {
+          id: currentUserId,
+          name: "You",
+          email: null,
+          username: null,
+          image: null,
+          role: "MEMBER",
+        },
+        referencedTasks: [],
+      };
+
       setBody("");
-      await queryClient.invalidateQueries({
-        queryKey: ["project-messages", projectId],
-      });
+      setReplyTo(null);
+      queryClient.setQueryData<ProjectMessagesData>(
+        ["project-messages", projectId],
+        (current) => upsertProjectMessage(current, optimisticMessage),
+      );
+
+      return { previous, tempId, messageBody };
+    },
+    onSuccess: async (message, _messageBody, context) => {
+      if (projectId) {
+        queryClient.setQueryData<ProjectMessagesData>(
+          ["project-messages", projectId],
+          (current) => upsertProjectMessage(current, message, context?.tempId),
+        );
+      }
       await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
-    onError: () => toast.error("Project message could not be posted"),
+    onError: (_error, _messageBody, context) => {
+      if (projectId && context?.previous) {
+        queryClient.setQueryData(["project-messages", projectId], context.previous);
+      }
+
+      setBody(context?.messageBody ?? "");
+      toast.error("Project message could not be posted");
+    },
   });
+
+  function buildMessageBody() {
+    const trimmed = body.trim();
+    return replyTo
+      ? `Reply to ${replyTo.user.name ?? replyTo.user.email}: ${replyTo.body.slice(0, 120)}\n\n${trimmed}`
+      : trimmed;
+  }
 
   const mentionHint = members
     .map((member) => mentionValue(member.user))
@@ -152,79 +290,180 @@ export function ProjectChat({ projectId, members, tasks }: ProjectChatProps) {
   }
 
   return (
-    <Card className="rounded-2xl border border-border bg-card/40 backdrop-blur-xl shadow-sm">
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-md bg-primary/15 text-primary">
-            <MessageCircle />
+    <Card className="rounded-2xl border border-border bg-card/40 shadow-sm backdrop-blur-xl">
+      <CardHeader className="border-b border-border/70">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="grid size-10 place-items-center rounded-xl bg-primary/15 text-primary shadow-[0_0_18px_rgba(255,0,255,0.16)]">
+              <MessageCircle />
+            </div>
+            <div>
+              <CardTitle>Project chat</CardTitle>
+              <CardDescription>
+                All-member channel with @mentions, #task refs, and replies
+              </CardDescription>
+            </div>
           </div>
-          <div>
-            <CardTitle>Project chat</CardTitle>
-            <CardDescription>All-member channel with @mentions and #task refs</CardDescription>
-          </div>
+          <Badge variant="outline">{members.length} members</Badge>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex max-h-[300px] flex-col gap-3 overflow-y-auto pr-1">
-          {(messagesQuery.data ?? []).map((message) => (
-            <article
-              key={message.id}
-              className="rounded-xl border border-border bg-muted/40 p-4 shadow-sm"
+      <CardContent className="flex min-h-[calc(100vh-14rem)] flex-col gap-3 p-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-border/70 bg-background/35 p-4">
+          {messagesQuery.hasNextPage ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mx-auto"
+              disabled={messagesQuery.isFetchingNextPage}
+              onClick={() => messagesQuery.fetchNextPage()}
             >
-              <div className="mb-2 flex items-center gap-2">
-                <Avatar className="size-7">
-                  <AvatarImage src={message.user.image ?? undefined} />
-                  <AvatarFallback>{initials(message.user)}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {message.user.name ?? message.user.email}
-                  </p>
-                  <p className="mono-meta text-xs text-muted-foreground">
-                    {new Intl.DateTimeFormat("en", {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    }).format(new Date(message.createdAt))}
-                  </p>
-                </div>
-              </div>
-              <p className="whitespace-pre-wrap text-sm leading-6">{message.body}</p>
-              {message.referencedTasks.length ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {message.referencedTasks.map((task) => (
-                    <Button
-                      key={task.id}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedTaskId(task.id)}
+              Load older messages
+            </Button>
+          ) : null}
+          {messages.map((message) => {
+            const isMine = message.user.id === currentUserId;
+            const reply = splitReply(message.body);
+
+            return (
+              <article
+                key={message.id}
+                className={cn(
+                  "flex items-end gap-2",
+                  isMine ? "justify-end" : "justify-start",
+                )}
+              >
+                {!isMine ? (
+                  <Avatar className="size-8 shrink-0">
+                    <AvatarImage src={message.user.image ?? undefined} />
+                    <AvatarFallback>{initials(message.user)}</AvatarFallback>
+                  </Avatar>
+                ) : null}
+                <div
+                  className={cn(
+                    "group max-w-[min(58%,620px)] rounded-2xl border px-3 py-2.5 shadow-sm",
+                    isMine
+                      ? "rounded-br-md border-primary/30 bg-primary/90 text-primary-foreground shadow-[0_0_18px_rgba(255,0,255,0.16)]"
+                      : "rounded-bl-md border-border bg-card/75",
+                  )}
+                >
+                  <div className="mb-1 flex items-center justify-between gap-3">
+                    <p
+                      className={cn(
+                        "truncate text-xs font-semibold",
+                        isMine ? "text-white/86" : "text-foreground",
+                      )}
                     >
-                      <Hash data-icon="inline-start" />
-                      {task.title}
+                      {isMine ? "You" : message.user.name ?? message.user.email}
+                    </p>
+                    <p
+                      className={cn(
+                        "mono-meta shrink-0 text-[10px]",
+                        isMine ? "text-white/64" : "text-muted-foreground",
+                      )}
+                    >
+                      {new Intl.DateTimeFormat("en", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      }).format(new Date(message.createdAt))}
+                    </p>
+                  </div>
+                  {reply ? (
+                    <div
+                      className={cn(
+                        "mb-2 rounded-xl border px-3 py-2 text-xs",
+                        isMine
+                          ? "border-white/20 bg-white/12 text-white/76"
+                          : "border-border bg-background/45 text-muted-foreground",
+                      )}
+                    >
+                      <span className="font-semibold">Reply:</span> {reply.quote}
+                    </div>
+                  ) : null}
+                  <p className="whitespace-pre-wrap text-[13px] leading-5">
+                    {reply?.body ?? message.body}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {message.referencedTasks.map((task) => (
+                        <Button
+                          key={task.id}
+                          type="button"
+                          variant={isMine ? "secondary" : "outline"}
+                          size="sm"
+                          onClick={() => setSelectedTaskId(task.id)}
+                        >
+                          <Hash data-icon="inline-start" />
+                          {task.title}
+                        </Button>
+                      ))}
+                    </div>
+                    <Button
+                      type="button"
+                      variant={isMine ? "secondary" : "ghost"}
+                      size="icon-sm"
+                      onClick={() => setReplyTo(message)}
+                      aria-label="Reply"
+                    >
+                      <Reply />
                     </Button>
-                  ))}
+                  </div>
                 </div>
-              ) : null}
-            </article>
-          ))}
-          {!messagesQuery.data?.length ? (
-            <div className="rounded-xl border border-dashed border-border bg-muted/20 p-5 text-sm text-muted-foreground">
-              Start a project-wide thread for decisions, blockers, and handoffs.
+                {isMine ? (
+                  <Avatar className="size-8 shrink-0">
+                    <AvatarImage src={message.user.image ?? undefined} />
+                    <AvatarFallback>{initials(message.user)}</AvatarFallback>
+                  </Avatar>
+                ) : null}
+              </article>
+            );
+          })}
+          {!messages.length ? (
+            <div className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-border bg-muted/15 p-5 text-center">
+              <div>
+                <div className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                  <MessageCircle />
+                </div>
+                <p className="text-sm font-semibold">Start the project conversation</p>
+                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  Share blockers, decisions, handoffs, and task references with the full team.
+                </p>
+              </div>
             </div>
           ) : null}
         </div>
         <form
-          className="flex flex-col gap-3"
+          className="rounded-2xl border border-border bg-background/55 p-3 shadow-inner"
           onSubmit={(event) => {
             event.preventDefault();
             if (!body.trim() || !projectId) {
               return;
             }
-            messageMutation.mutate();
+            messageMutation.mutate(buildMessageBody());
           }}
         >
+          {replyTo ? (
+            <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-primary/20 bg-primary/10 p-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-primary">
+                  Replying to {replyTo.user.name ?? replyTo.user.email}
+                </p>
+                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                  {replyTo.body}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setReplyTo(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : null}
           <Textarea
             value={body}
             onChange={(event) => {
@@ -233,11 +472,12 @@ export function ProjectChat({ projectId, members, tasks }: ProjectChatProps) {
             }}
             onKeyUp={(event) => setCursor(event.currentTarget.selectionStart)}
             onClick={(event) => setCursor(event.currentTarget.selectionStart)}
-            placeholder={`Use ${mentionHint || "@username"} and #task-title`}
+            placeholder={`Message project. Use ${mentionHint || "@username"} and #task-title`}
             rows={3}
+            className="resize-none border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
           />
           {suggestions.length ? (
-            <div className="rounded-xl border border-border bg-card p-2 shadow-xl">
+            <div className="mt-2 rounded-xl border border-border bg-card p-2 shadow-xl">
               {suggestions.map((suggestion) => (
                 <button
                   key={suggestion.id}
@@ -253,9 +493,9 @@ export function ProjectChat({ projectId, members, tasks }: ProjectChatProps) {
               ))}
             </div>
           ) : null}
-          <div className="flex items-center justify-between gap-3">
+          <div className="mt-3 flex items-center justify-between gap-3">
             <Badge variant="outline" className="mono-meta">
-              #task-title
+              @mention / #task
             </Badge>
             <Button type="submit" disabled={messageMutation.isPending || !projectId}>
               <Send data-icon="inline-start" />

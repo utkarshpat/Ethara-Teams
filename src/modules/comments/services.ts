@@ -90,6 +90,14 @@ export async function createTaskComment(
     include: commentInclude,
   });
 
+  const [hydratedComment] = await hydrateComments([comment], task.projectId);
+
+  await triggerTaskEvent(taskId, "comment:created", hydratedComment);
+  await triggerProjectEvent(task.projectId, "comment:created", {
+    taskId,
+    commentId: comment.id,
+  });
+
   const mentionKeys = [...new Set(extractMentionKeys(input.body))];
 
   if (mentionKeys.length) {
@@ -125,12 +133,6 @@ export async function createTaskComment(
     );
   }
 
-  await triggerTaskEvent(taskId, "comment:created", comment);
-  await triggerProjectEvent(task.projectId, "comment:created", {
-    taskId,
-    commentId: comment.id,
-  });
-
   logger.info("comment.created", {
     userId,
     taskId,
@@ -138,6 +140,5 @@ export async function createTaskComment(
     commentId: comment.id,
     mentionCount: mentionKeys.length,
   });
-  const [hydratedComment] = await hydrateComments([comment], task.projectId);
   return hydratedComment;
 }

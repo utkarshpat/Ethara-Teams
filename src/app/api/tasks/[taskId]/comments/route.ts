@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, requireApiUser } from "@/lib/api";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import {
   commentCreateSchema,
   createTaskComment,
@@ -26,6 +27,12 @@ export async function GET(_request: Request, context: TaskRouteContext) {
 export async function POST(request: Request, context: TaskRouteContext) {
   try {
     const user = await requireApiUser();
+    enforceRateLimit(request, {
+      scope: "comments:create",
+      userId: user.id,
+      limit: 30,
+      windowMs: 60_000,
+    });
     const { taskId } = await context.params;
     const input = commentCreateSchema.parse(await request.json());
     const comment = await createTaskComment(user.id, taskId, input);

@@ -13,7 +13,7 @@ const allowedViews = [
   "chat",
   "reports",
   "team",
-  "settings",
+  "trash",
 ] as const;
 
 type DashboardViewPageProps = {

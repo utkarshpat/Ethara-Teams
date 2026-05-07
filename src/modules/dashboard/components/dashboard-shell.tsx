@@ -7,17 +7,17 @@ import {
   BarChart3,
   Bell,
   CalendarDays,
+  CheckCheck,
   CheckCircle2,
   ChevronDown,
-  CircleDot,
   LayoutDashboard,
   ListTodo,
   LogOut,
   MessageSquare,
   Plus,
   Search,
-  Settings,
   Timer,
+  Trash2,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -74,11 +74,17 @@ import { useProjectRealtime } from "@/hooks/use-realtime";
 import { cn } from "@/lib/utils";
 import { CalendarPanel } from "@/modules/dashboard/components/calendar-panel";
 import { KanbanBoard } from "@/modules/dashboard/components/kanban-board";
-import { ProjectChat } from "@/modules/dashboard/components/project-chat";
+import {
+  ProjectChat,
+  type ProjectMessagesData,
+  upsertProjectMessage,
+} from "@/modules/dashboard/components/project-chat";
 import { TaskSheet } from "@/modules/dashboard/components/task-sheet";
 import type {
   DashboardAnalytics,
+  DashboardTrash,
   DashboardNotification,
+  DashboardProjectMessage,
   DashboardProject,
   DashboardTask,
   DashboardUser,
@@ -132,7 +138,7 @@ const railItems: Array<{
   { label: "Chat", icon: MessageSquare, view: "chat", href: "/dashboard/chat" },
   { label: "Reports", icon: BarChart3, view: "reports", href: "/dashboard/reports" },
   { label: "Team", icon: Users, view: "team", href: "/dashboard/team" },
-  { label: "Settings", icon: Settings, view: "settings", href: "/dashboard/settings" },
+  { label: "Trash", icon: Trash2, view: "trash", href: "/dashboard/trash" },
 ];
 
 async function fetchJson<T>(url: string, init?: RequestInit) {
@@ -160,14 +166,6 @@ function toDateTimeInput(date: string) {
   return new Date(date).toISOString().slice(0, 16);
 }
 
-function todayLabel() {
-  return new Intl.DateTimeFormat("en-IN", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date());
-}
-
 function viewPath(view: DashboardView) {
   if (view === "overview") {
     return "/dashboard";
@@ -182,13 +180,13 @@ function viewPath(view: DashboardView) {
 
 function viewLabel(view: DashboardView) {
   const labels: Record<DashboardView, string> = {
-    overview: "Project overview",
-    board: "Active sprint",
+    overview: "Workspace",
+    board: "Tasks",
     calendar: "Calendar",
-    chat: "Project chat",
+    chat: "Chat",
     reports: "Reports",
     team: "Team",
-    settings: "Settings",
+    trash: "Trash",
   };
 
   return labels[view];
@@ -221,10 +219,16 @@ export function DashboardShell({
     "task:status_changed": () => refreshProjectData(),
     "task:deleted": () => refreshProjectData(),
     "comment:created": () => refreshProjectData(),
-    "project:message_created": () => {
-      queryClient.invalidateQueries({
-        queryKey: ["project-messages", selectedProjectId],
-      });
+    "project:message_created": (payload) => {
+      const message = payload as DashboardProjectMessage;
+
+      if (message.projectId === selectedProjectId) {
+        queryClient.setQueryData<ProjectMessagesData>(
+          ["project-messages", selectedProjectId],
+          (current) => upsertProjectMessage(current, message),
+        );
+      }
+
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
@@ -261,6 +265,12 @@ export function DashboardShell({
     queryKey: ["notifications"],
     queryFn: () => fetchJson<DashboardNotification[]>("/api/notifications"),
     initialData: initialNotifications,
+  });
+
+  const trashQuery = useQuery({
+    queryKey: ["trash"],
+    queryFn: () => fetchJson<DashboardTrash>("/api/trash"),
+    enabled: activeView === "trash",
   });
 
   const selectedProject = projectsQuery.data.find(
@@ -393,6 +403,42 @@ export function DashboardShell({
     },
   });
 
+  const markNotificationsMutation = useMutation({
+    mutationFn: (ids: string[]) =>
+      fetchJson<{ count: number }>("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, read: true }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      toast.success("Notification marked as read");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (payload: { type: "project" | "task"; id: string }) =>
+      fetchJson<{ id: string; type: "project" | "task"; restored: boolean }>(
+        "/api/trash",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["trash"] }),
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+        queryClient.invalidateQueries({ queryKey: ["tasks", selectedProjectId] }),
+        queryClient.invalidateQueries({ queryKey: ["analytics", selectedProjectId] }),
+      ]);
+      toast.success("Item restored");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   function handleProjectSelect(projectId: string) {
     setOptimisticTasks(null);
     setSelectedProjectId(projectId);
@@ -438,120 +484,89 @@ export function DashboardShell({
             currentUser={currentUser}
             roleLabel={roleLabel}
             unreadCount={unreadCount}
+            notifications={notificationsQuery.data}
+            onMarkRead={(id) => markNotificationsMutation.mutate([id])}
+            isMarkingRead={markNotificationsMutation.isPending}
           />
 
-          <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <ScrollArea className="min-h-0">
-              <div className="flex min-w-0 flex-col gap-5 p-4 lg:p-5">
-                <ProjectCommandHeader
-                  selectedProject={selectedProject}
-                  selectedProjectRole={selectedProjectRole}
-                  canManageProject={canManageProject}
-                  isMemberDialogOpen={isMemberDialogOpen}
-                  setMemberDialogOpen={setMemberDialogOpen}
-                  memberMutation={memberMutation}
-                />
-
-                <MetricStrip analytics={analytics} />
-
-                <Card className="overflow-hidden rounded-2xl border border-border bg-card/50 shadow-sm backdrop-blur-xl">
-                  <CardHeader className="border-b border-border/70 px-4 py-4">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="min-w-0">
-                        <CardTitle className="truncate">
-                          {viewLabel(activeView)}
-                        </CardTitle>
-                        <CardDescription>
-                          {canManageProject
-                            ? "Plan, assign, sync, and monitor delivery from one command surface."
-                            : "Track assigned work, calendar commitments, and project collaboration."}
-                        </CardDescription>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {selectedProject && canCreateTask && activeView === "board" ? (
-                          <TaskDialog
-                            open={isTaskDialogOpen}
-                            onOpenChange={setTaskDialogOpen}
-                            members={selectedProject.members}
-                            onSubmit={(payload) => taskMutation.mutate(payload)}
-                            isPending={taskMutation.isPending}
-                          />
-                        ) : null}
-                      </div>
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="flex min-w-0 flex-col p-4 lg:p-5">
+              <Card className="min-h-[calc(100vh-7.5rem)] overflow-hidden rounded-2xl border border-border bg-card/50 shadow-sm backdrop-blur-xl">
+                <CardHeader className="border-b border-border/70 px-4 py-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <CardTitle className="truncate">
+                        {viewLabel(activeView)}
+                      </CardTitle>
                     </div>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    {activeView === "overview" ? (
-                      <OverviewPanel
-                        selectedProject={selectedProject}
-                        analytics={analytics}
-                        statusData={statusData}
-                        notifications={notificationsQuery.data}
-                      />
-                    ) : null}
-                    {activeView === "board" ? (
-                      <KanbanBoard
-                        tasks={boardTasks}
-                        onReorder={setOptimisticTasks}
-                        canMoveTask={canMoveTask}
-                        onDeniedMove={() =>
-                          toast.info("Members can only move tasks assigned to them")
-                        }
-                        onMove={(taskId, status, order) =>
-                          moveMutation.mutate({ taskId, status, order })
-                        }
-                      />
-                    ) : null}
-                    {activeView === "calendar" ? <CalendarPanel /> : null}
-                    {activeView === "chat" ? (
-                      <ProjectChat
-                        projectId={selectedProjectId}
-                        members={selectedProject?.members ?? []}
-                        tasks={boardTasks}
-                      />
-                    ) : null}
-                    {activeView === "reports" ? (
-                      <ReportsPanel
-                        analytics={analytics}
-                        statusData={statusData}
-                        notifications={notificationsQuery.data}
-                      />
-                    ) : null}
-                    {activeView === "team" ? (
-                      <TeamPanel
-                        selectedProject={selectedProject}
-                        canManageProject={canManageProject}
-                        isMemberDialogOpen={isMemberDialogOpen}
-                        setMemberDialogOpen={setMemberDialogOpen}
-                        memberMutation={memberMutation}
-                      />
-                    ) : null}
-                    {activeView === "settings" ? (
-                      <SettingsPanel
-                        currentUser={currentUser}
-                        selectedProject={selectedProject}
-                        canManageProject={canManageProject}
-                      />
-                    ) : null}
-                  </CardContent>
-                </Card>
-              </div>
-            </ScrollArea>
-
-            <aside className="hidden min-h-0 border-l border-border/70 bg-card/30 xl:block">
-              <ScrollArea className="h-full">
-                <div className="flex flex-col gap-4 p-4">
-                  <ProjectChat
-                    projectId={selectedProjectId}
-                    members={selectedProject?.members ?? []}
-                    tasks={boardTasks}
-                  />
-                  <StatusPanel statusData={statusData} />
-                  <NotificationPanel notifications={notificationsQuery.data} />
-                </div>
-              </ScrollArea>
-            </aside>
-          </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {selectedProject && canCreateTask && activeView === "board" ? (
+                        <TaskDialog
+                          open={isTaskDialogOpen}
+                          onOpenChange={setTaskDialogOpen}
+                          members={selectedProject.members}
+                          onSubmit={(payload) => taskMutation.mutate(payload)}
+                          isPending={taskMutation.isPending}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4">
+                  {activeView === "overview" ? (
+                    <OverviewPanel
+                      selectedProject={selectedProject}
+                      analytics={analytics}
+                      statusData={statusData}
+                      notifications={notificationsQuery.data}
+                    />
+                  ) : null}
+                  {activeView === "board" ? (
+                    <KanbanBoard
+                      tasks={boardTasks}
+                      onReorder={setOptimisticTasks}
+                      canMoveTask={canMoveTask}
+                      onDeniedMove={() =>
+                        toast.info("Members can only move tasks assigned to them")
+                      }
+                      onMove={(taskId, status, order) =>
+                        moveMutation.mutate({ taskId, status, order })
+                      }
+                    />
+                  ) : null}
+                  {activeView === "calendar" ? <CalendarPanel /> : null}
+                  {activeView === "chat" ? (
+                    <ProjectChat
+                      projectId={selectedProjectId}
+                      members={selectedProject?.members ?? []}
+                      tasks={boardTasks}
+                      currentUserId={currentUser.id}
+                    />
+                  ) : null}
+                  {activeView === "reports" ? (
+                    <ReportsPanel analytics={analytics} statusData={statusData} />
+                  ) : null}
+                  {activeView === "team" ? (
+                    <TeamPanel
+                      selectedProject={selectedProject}
+                      canManageProject={canManageProject}
+                      isMemberDialogOpen={isMemberDialogOpen}
+                      setMemberDialogOpen={setMemberDialogOpen}
+                      memberMutation={memberMutation}
+                    />
+                  ) : null}
+                  {activeView === "trash" ? (
+                    <TrashPanel
+                      trash={trashQuery.data}
+                      isLoading={trashQuery.isLoading}
+                      isRestoring={restoreMutation.isPending}
+                      onRestore={(payload) => restoreMutation.mutate(payload)}
+                    />
+                  ) : null}
+                </CardContent>
+              </Card>
+            </div>
+          </ScrollArea>
         </section>
       </div>
 
@@ -559,6 +574,7 @@ export function DashboardShell({
         task={selectedTask}
         members={selectedProject?.members ?? []}
         tasks={boardTasks}
+        currentUser={currentUser}
         canManageProject={canManageProject}
       />
     </main>
@@ -653,59 +669,61 @@ function WorkspaceSidebar({
   }>>;
   onProjectSelect: (projectId: string) => void;
 }) {
-  return (
-    <aside className="hidden w-[272px] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-[#2b0d52]/92 via-[#1b0b35]/92 to-[#090513]/94 text-white shadow-2xl shadow-black/25 xl:flex">
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <button
-              type="button"
-              className="flex items-center justify-between gap-3 px-4 py-4 text-left transition hover:bg-white/[0.04]"
-            />
-          }
+  const [isCollapsed, setCollapsed] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
+  const projectName = selectedProject?.name ?? "No project";
+
+  if (isCollapsed) {
+    return (
+      <aside className="hidden w-[56px] shrink-0 flex-col items-center border-r border-white/10 bg-gradient-to-b from-[#250a49]/94 via-[#16072e]/94 to-[#070311]/96 py-4 text-white shadow-2xl shadow-black/25 xl:flex">
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          className="flex min-h-0 flex-1 flex-col items-center gap-3 rounded-2xl px-2 py-3 text-white/72 transition hover:bg-white/10 hover:text-white"
+          aria-label="Expand workspace sidebar"
         >
-          <div className="min-w-0">
-            <p className="text-xs uppercase tracking-[0.22em] text-white/45">
-              Workspace
-            </p>
-            <h2 className="mt-1 truncate text-2xl font-semibold tracking-normal">
-              Ethara Teams
-            </h2>
-          </div>
-          <ChevronDown className="shrink-0 text-white/60" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-[260px]">
-          {projects.map((project) => (
-            <DropdownMenuItem
-              key={project.id}
-              onClick={() => onProjectSelect(project.id)}
-              className="cursor-pointer"
-            >
-              <span className="truncate">{project.name}</span>
-              {project.id === selectedProjectId ? (
-                <Badge variant="outline" className="ml-auto">
-                  Active
-                </Badge>
-              ) : null}
-            </DropdownMenuItem>
-          ))}
-          {currentUser.role === "ADMIN" ? (
-            <DropdownMenuItem
-              onClick={(event) => {
-                event.preventDefault();
-                setProjectDialogOpen(true);
-              }}
-            >
-              <Plus />
-              New project
-            </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
-            <LogOut />
-            Log out
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          <span className="flex flex-col items-center gap-0.5 text-[10px] font-semibold uppercase leading-none tracking-normal text-white/48">
+            {"workspace".split("").map((letter, index) => (
+              <span key={`${letter}-${index}`}>{letter}</span>
+            ))}
+          </span>
+          <span className="size-1.5 rounded-full bg-primary shadow-[0_0_14px_rgba(255,0,255,0.9)]" />
+          <span className="[writing-mode:vertical-rl] rotate-180 truncate text-xs font-semibold">
+            {projectName}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          className="mt-3 grid size-9 place-items-center rounded-xl border border-white/10 bg-white/[0.05] text-white/70 transition hover:border-primary/35 hover:text-primary"
+          aria-label="Open project selector"
+        >
+          <ChevronDown className="size-4 rotate-90" />
+        </button>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="hidden w-[224px] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-[#250a49]/94 via-[#16072e]/94 to-[#070311]/96 text-white shadow-2xl shadow-black/25 xl:flex">
+      <div className="flex items-start justify-between gap-2 px-4 pb-3 pt-4">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
+            Workspace
+          </p>
+          <h2 className="mt-1 truncate text-xl font-semibold tracking-normal">
+            Ethara Teams
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          className="grid size-8 shrink-0 place-items-center rounded-lg text-white/60 transition hover:bg-white/10 hover:text-white"
+          aria-label="Collapse workspace sidebar"
+        >
+          <ChevronDown className="size-4 rotate-90" />
+        </button>
+      </div>
       <ProjectDialog
         open={isProjectDialogOpen}
         onOpenChange={setProjectDialogOpen}
@@ -714,139 +732,155 @@ function WorkspaceSidebar({
         trigger={null}
       />
 
-      <ScrollArea className="flex-1 px-3">
-        <div className="flex flex-col gap-5 pb-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Projects</p>
-              <p className="text-xs text-white/50">{projects.length} active</p>
+      <div className="flex flex-1 flex-col gap-4 px-3">
+        <div className="rounded-2xl border border-primary/30 bg-primary/85 p-2.5 shadow-[0_0_24px_rgba(255,0,255,0.18)]">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/62">
+                Selected project
+              </p>
+              <p className="mt-1 truncate text-sm font-semibold">
+                {projectName}
+              </p>
+              <p className="mt-1 text-[11px] text-white/70">
+                {selectedProject?.taskCount ?? 0} tasks / {selectedProject?.members.length ?? 0} members
+              </p>
             </div>
-            {selectedProject && canManageProject ? (
-              <TaskDialog
-                open={isTaskDialogOpen}
-                onOpenChange={setTaskDialogOpen}
-                members={selectedProject.members}
-                onSubmit={(payload) => taskMutation.mutate(payload)}
-                isPending={taskMutation.isPending}
-              />
-            ) : null}
+            <button
+              type="button"
+              onClick={() => setShowMembers((value) => !value)}
+              className={cn(
+                "grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 transition",
+                showMembers
+                  ? "bg-white text-primary"
+                  : "bg-white/10 text-white/80 hover:bg-white/18 hover:text-white",
+              )}
+              aria-label="Show assigned members"
+            >
+              <Users className="size-4" />
+            </button>
           </div>
-
-          <div className="flex flex-col gap-1.5">
-            {projects.map((project) => {
-              const isSelected = project.id === selectedProjectId;
-
-              return (
-                <div
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  className="mt-3 flex h-8 w-full items-center justify-between rounded-xl border border-white/10 bg-white/10 px-3 text-xs font-semibold text-white/86 transition hover:bg-white/18"
+                />
+              }
+            >
+              <span>Switch project</span>
+              <ChevronDown className="size-4 text-white/75" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[300px] p-2">
+              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                Select a project
+              </div>
+              {projects.map((project) => (
+                <DropdownMenuItem
                   key={project.id}
-                  className={cn(
-                    "group grid grid-cols-[minmax(0,1fr)_34px] items-center rounded-xl border px-2.5 py-2 transition",
-                    isSelected
-                      ? "border-primary/45 bg-primary/90 text-white shadow-[0_0_20px_rgba(255,0,255,0.22)]"
-                      : "border-white/5 bg-white/[0.035] text-white/72 hover:border-white/12 hover:bg-white/[0.075] hover:text-white",
-                  )}
+                  onClick={() => onProjectSelect(project.id)}
+                  className="cursor-pointer gap-3 rounded-lg"
                 >
-                  <button
-                    type="button"
-                    onClick={() => onProjectSelect(project.id)}
-                    className="min-w-0 text-left"
-                  >
-                    <span className="block truncate text-sm font-semibold leading-5">
+                  <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                    {project.name.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">
                       {project.name}
                     </span>
-                    <span className="mt-0.5 flex items-center gap-2 text-[11px] text-white/58">
-                      <span>{project.taskCount} tasks</span>
-                      <span className="size-1 rounded-full bg-white/25" />
-                      <span>{project.members.length} members</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {project.taskCount} tasks / {project.members.length} members
                     </span>
-                  </button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <button
-                          type="button"
-                          className="grid size-8 place-items-center rounded-lg text-white/62 transition hover:bg-white/10 hover:text-white"
-                          aria-label={`${project.name} team`}
-                        />
-                      }
-                    >
-                      <ChevronDown className="size-4" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-[280px]">
-                      {project.members.map((member) => (
-                        <DropdownMenuItem key={member.id} className="gap-3">
-                          <Avatar className="size-7">
-                            <AvatarImage src={member.user.image ?? undefined} />
-                            <AvatarFallback>{initials(member.user)}</AvatarFallback>
-                          </Avatar>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">
-                              {member.user.name ?? member.user.email}
-                            </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {member.user.email}
-                            </span>
-                          </span>
-                          <Badge variant="outline">{member.role}</Badge>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              );
-            })}
-            {!projects.length ? (
-              <div className="rounded-xl border border-dashed border-white/15 p-4 text-sm text-white/55">
-                No projects yet.
-              </div>
-            ) : null}
-          </div>
-
-          <Separator className="bg-white/10" />
-
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold">Team</p>
-                <p className="text-xs text-white/50">
-                  {selectedProject?.members.length ?? 0} people
-                </p>
-              </div>
-              {selectedProject && canManageProject ? (
-                <MemberDialog
-                  open={isMemberDialogOpen}
-                  onOpenChange={setMemberDialogOpen}
-                  onSubmit={(payload) => memberMutation.mutate(payload)}
-                  isPending={memberMutation.isPending}
-                />
+                  </span>
+                  {project.id === selectedProjectId ? (
+                    <Badge variant="outline">Active</Badge>
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+              {currentUser.role === "ADMIN" ? (
+                <>
+                  <Separator className="my-2" />
+                  <DropdownMenuItem
+                    onClick={(event) => {
+                      event.preventDefault();
+                      setProjectDialogOpen(true);
+                    }}
+                    className="cursor-pointer rounded-lg"
+                  >
+                    <Plus />
+                    New project
+                  </DropdownMenuItem>
+                </>
               ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {selectedProject && canManageProject ? (
+          <div className="grid gap-2">
+            <TaskDialog
+              open={isTaskDialogOpen}
+              onOpenChange={setTaskDialogOpen}
+              members={selectedProject.members}
+              onSubmit={(payload) => taskMutation.mutate(payload)}
+              isPending={taskMutation.isPending}
+            />
+            <MemberDialog
+              open={isMemberDialogOpen}
+              onOpenChange={setMemberDialogOpen}
+              onSubmit={(payload) => memberMutation.mutate(payload)}
+              isPending={memberMutation.isPending}
+            />
+          </div>
+        ) : null}
+
+        {showMembers ? (
+          <div className="min-h-0 rounded-2xl border border-white/10 bg-white/[0.045] p-2">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <p className="text-xs font-semibold text-white/80">Assigned members</p>
+              <Badge variant="outline">{selectedProject?.members.length ?? 0}</Badge>
             </div>
-            <div className="flex flex-col gap-2">
-              {selectedProject?.members.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.06] px-3 py-2"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Avatar className="size-7">
-                      <AvatarImage src={member.user.image ?? undefined} />
-                      <AvatarFallback>{initials(member.user)}</AvatarFallback>
-                    </Avatar>
-                    <span className="truncate text-sm text-white/86">
-                      {member.user.name ?? member.user.email}
+            <ScrollArea className="h-[280px]">
+              <div className="grid gap-1.5 pr-2">
+                {selectedProject?.members.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.06] px-2 py-2"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Avatar className="size-7">
+                        <AvatarImage src={member.user.image ?? undefined} />
+                        <AvatarFallback>{initials(member.user)}</AvatarFallback>
+                      </Avatar>
+                      <span className="truncate text-xs text-white/86">
+                        {member.user.name ?? member.user.email}
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-semibold text-white/45">
+                      {member.role}
                     </span>
                   </div>
-                  <span className="text-[10px] font-semibold text-white/50">
-                    {member.role}
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </ScrollArea>
           </div>
-        </div>
-      </ScrollArea>
+        ) : null}
 
-      <div className="border-t border-white/10 p-4">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/42">
+            Access
+          </p>
+          <p className="mt-1 text-sm font-semibold">
+            {canManageProject ? "Project admin" : "Project member"}
+          </p>
+          <p className="mt-1 text-xs text-white/52">
+            Team roster and member controls live in the Team page.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-auto border-t border-white/10 p-3">
         <button
           type="button"
           onClick={() => signOut({ callbackUrl: "/" })}
@@ -864,10 +898,16 @@ function TopBar({
   currentUser,
   roleLabel,
   unreadCount,
+  notifications,
+  onMarkRead,
+  isMarkingRead,
 }: {
   currentUser: DashboardUser;
   roleLabel: string;
   unreadCount: number;
+  notifications: DashboardNotification[];
+  onMarkRead: (id: string) => void;
+  isMarkingRead: boolean;
 }) {
   return (
     <header className="flex min-h-16 items-center justify-between gap-3 border-b border-border/70 bg-card/40 px-4 backdrop-blur-xl lg:px-5">
@@ -883,10 +923,70 @@ function TopBar({
       </div>
       <div className="flex items-center gap-2">
         <ThemeToggle />
-        <div className="hidden items-center gap-2 rounded-xl border border-border bg-background/60 px-3 py-2 text-sm md:flex">
-          <Bell />
-          <span className="font-medium">{unreadCount}</span>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                className="relative flex items-center gap-2 rounded-xl border border-border bg-background/60 px-3 py-2 text-sm transition hover:border-primary/30 hover:text-primary"
+                aria-label="Open notifications"
+              />
+            }
+          >
+            <Bell />
+            <span className="font-medium">{unreadCount}</span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[360px] max-w-[calc(100vw-2rem)] p-2">
+            <div className="flex items-center justify-between px-2 py-2">
+              <div>
+                <p className="text-sm font-semibold">Notifications</p>
+                <p className="text-xs text-muted-foreground">
+                  Mentions, assignments, and project updates
+                </p>
+              </div>
+              <Badge variant="outline">{unreadCount} unread</Badge>
+            </div>
+            <Separator className="my-2" />
+            <div className="grid max-h-[360px] gap-2 overflow-y-auto">
+              {notifications.slice(0, 8).map((notification) => (
+                <div
+                  key={notification.id}
+                  className="rounded-xl border border-border bg-background/55 p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="line-clamp-1 text-sm font-medium">
+                        {notification.title}
+                      </p>
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                        {notification.body}
+                      </p>
+                    </div>
+                    {!notification.read ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isMarkingRead}
+                        onClick={() => onMarkRead(notification.id)}
+                      >
+                        <CheckCheck data-icon="inline-start" />
+                        Read
+                      </Button>
+                    ) : (
+                      <Badge variant="outline">Read</Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {!notifications.length ? (
+                <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+                  No notifications yet.
+                </p>
+              ) : null}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -916,85 +1016,6 @@ function TopBar({
         </DropdownMenu>
       </div>
     </header>
-  );
-}
-
-function ProjectCommandHeader({
-  selectedProject,
-  selectedProjectRole,
-  canManageProject,
-  isMemberDialogOpen,
-  setMemberDialogOpen,
-  memberMutation,
-}: {
-  selectedProject: DashboardProject | undefined;
-  selectedProjectRole: "ADMIN" | "MEMBER";
-  canManageProject: boolean;
-  isMemberDialogOpen: boolean;
-  setMemberDialogOpen: (open: boolean) => void;
-  memberMutation: ReturnType<typeof useMutation<{ kind: "member" | "invitation" }, Error, { email: string; role: "ADMIN" | "MEMBER" }>>;
-}) {
-  return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
-      <div className="flex flex-col gap-5 p-5 2xl:flex-row 2xl:items-center 2xl:justify-between">
-        <div className="min-w-0">
-          <button
-            type="button"
-            className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground"
-          >
-            <CircleDot />
-            Back to projects
-          </button>
-          <h1 className="max-w-full text-3xl font-semibold tracking-normal">
-            {selectedProject?.name ?? "Project dashboard"}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            {selectedProject?.description ??
-              "Manage team work, sync meetings, task execution, and project-level collaboration."}
-          </p>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-3 2xl:min-w-[520px]">
-          <HeaderStat label="Today" value={todayLabel()} />
-          <HeaderStat
-            label="People on project"
-            value={`${selectedProject?.members.length ?? 0} members`}
-          />
-          <HeaderStat label="Access" value={`Project ${selectedProjectRole}`} />
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 px-5 py-3">
-        <div className="flex -space-x-2">
-          {selectedProject?.members.slice(0, 7).map((member) => (
-            <Avatar key={member.id} className="size-8 border-2 border-background">
-              <AvatarImage src={member.user.image ?? undefined} />
-              <AvatarFallback>{initials(member.user)}</AvatarFallback>
-            </Avatar>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {selectedProject && canManageProject ? (
-            <MemberDialog
-              open={isMemberDialogOpen}
-              onOpenChange={setMemberDialogOpen}
-              onSubmit={(payload) => memberMutation.mutate(payload)}
-              isPending={memberMutation.isPending}
-            />
-          ) : null}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HeaderStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-background/55 px-3 py-3">
-      <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 truncate text-sm font-semibold">{value}</p>
-    </div>
   );
 }
 
@@ -1167,86 +1188,193 @@ function TeamPanel({
 function ReportsPanel({
   analytics,
   statusData,
-  notifications,
 }: {
   analytics: DashboardAnalytics;
   statusData: Array<{ name: string; value: number }>;
-  notifications: DashboardNotification[];
 }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <StatusPanel statusData={statusData} />
-      <PriorityPanel analytics={analytics} />
-      <div className="lg:col-span-2">
-        <NotificationPanel notifications={notifications} />
+    <div className="grid gap-4">
+      <MetricStrip analytics={analytics} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <StatusPanel statusData={statusData} />
+        <PriorityPanel analytics={analytics} />
       </div>
     </div>
   );
 }
 
-function SettingsPanel({
-  currentUser,
-  selectedProject,
-  canManageProject,
+function TrashPanel({
+  trash,
+  isLoading,
+  isRestoring,
+  onRestore,
 }: {
-  currentUser: DashboardUser;
-  selectedProject: DashboardProject | undefined;
-  canManageProject: boolean;
+  trash: DashboardTrash | undefined;
+  isLoading: boolean;
+  isRestoring: boolean;
+  onRestore: (payload: { type: "project" | "task"; id: string }) => void;
+}) {
+  const projects = trash?.projects ?? [];
+  const tasks = trash?.tasks ?? [];
+
+  return (
+    <div className="grid gap-4">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card/50 shadow-sm backdrop-blur-xl">
+        <div className="flex flex-col gap-4 border-b border-border/70 p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="grid size-11 place-items-center rounded-2xl bg-primary/12 text-primary">
+              <Trash2 />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold tracking-normal">Trash recovery</h3>
+              <p className="text-sm text-muted-foreground">
+                Restore soft-deleted projects and tasks without losing delivery history.
+              </p>
+            </div>
+          </div>
+          <Badge variant="outline" className="mono-meta">
+            {projects.length + tasks.length} archived
+          </Badge>
+        </div>
+        <div className="grid gap-3 p-4 sm:grid-cols-3">
+          <TrashStat label="Deleted projects" value={projects.length} />
+          <TrashStat label="Deleted tasks" value={tasks.length} />
+          <TrashStat
+            label="Restorable now"
+            value={
+              projects.filter((project) => project.canRestore).length +
+              tasks.filter((task) => task.canRestore && !task.projectDeletedAt).length
+            }
+          />
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card/35 p-8 text-center text-sm text-muted-foreground">
+          Loading trash...
+        </div>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <TrashSection
+          title="Deleted projects"
+          empty="No deleted projects."
+          items={projects.map((project) => ({
+            id: project.id,
+            type: "project" as const,
+            title: project.name,
+            meta: `${project.taskCount} tasks / ${project.memberCount} members`,
+            deletedAt: project.deletedAt,
+            canRestore: project.canRestore,
+            blockedReason: null,
+          }))}
+          isRestoring={isRestoring}
+          onRestore={onRestore}
+        />
+        <TrashSection
+          title="Deleted tasks"
+          empty="No deleted tasks."
+          items={tasks.map((task) => ({
+            id: task.id,
+            type: "task" as const,
+            title: task.title,
+            meta: `${task.projectName} / ${task.status.replace("_", " ")} / ${task.priority}`,
+            deletedAt: task.deletedAt,
+            canRestore: task.canRestore && !task.projectDeletedAt,
+            blockedReason: task.projectDeletedAt
+              ? "Restore parent project first"
+              : null,
+          }))}
+          isRestoring={isRestoring}
+          onRestore={onRestore}
+        />
+      </div>
+    </div>
+  );
+}
+
+function TrashStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-border bg-background/45 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-semibold tracking-normal">{value}</p>
+    </div>
+  );
+}
+
+function TrashSection({
+  title,
+  empty,
+  items,
+  isRestoring,
+  onRestore,
+}: {
+  title: string;
+  empty: string;
+  items: Array<{
+    id: string;
+    type: "project" | "task";
+    title: string;
+    meta: string;
+    deletedAt: string | null;
+    canRestore: boolean;
+    blockedReason: string | null;
+  }>;
+  isRestoring: boolean;
+  onRestore: (payload: { type: "project" | "task"; id: string }) => void;
 }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
-        <CardHeader>
-          <CardTitle>Workspace settings</CardTitle>
-          <CardDescription>
-            Operational preferences for the selected project workspace.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 text-sm">
-          <div className="flex items-center justify-between rounded-xl border border-border bg-background/45 p-3">
-            <span className="text-muted-foreground">Selected project</span>
-            <span className="font-medium">{selectedProject?.name ?? "No project"}</span>
+    <Card className="overflow-hidden rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
+      <CardHeader className="border-b border-border/70">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle>{title}</CardTitle>
+            <CardDescription>Soft-deleted items remain recoverable.</CardDescription>
           </div>
-          <div className="flex items-center justify-between rounded-xl border border-border bg-background/45 p-3">
-            <span className="text-muted-foreground">Project access</span>
-            <Badge variant={canManageProject ? "default" : "outline"}>
-              {canManageProject ? "ADMIN" : "MEMBER"}
-            </Badge>
+          <Badge variant="outline">{items.length}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {items.map((item) => (
+          <div
+            key={`${item.type}-${item.id}`}
+            className="flex flex-col gap-3 rounded-2xl border border-border bg-background/50 p-3 transition hover:border-primary/30 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="truncate text-sm font-semibold">{item.title}</p>
+                <Badge variant="outline">{item.type}</Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{item.meta}</p>
+              <p className="mono-meta mt-1 text-[11px] text-muted-foreground">
+                Deleted {item.deletedAt ? new Date(item.deletedAt).toLocaleString() : "recently"}
+              </p>
+              {item.blockedReason ? (
+                <p className="mt-2 text-xs text-primary">{item.blockedReason}</p>
+              ) : null}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-fit"
+              disabled={!item.canRestore || isRestoring}
+              onClick={() => onRestore({ type: item.type, id: item.id })}
+            >
+              <CheckCircle2 data-icon="inline-start" />
+              Restore
+            </Button>
           </div>
-          <div className="flex items-center justify-between rounded-xl border border-border bg-background/45 p-3">
-            <span className="text-muted-foreground">Team size</span>
-            <span className="font-medium">
-              {selectedProject?.members.length ?? 0} members
-            </span>
+        ))}
+        {!items.length ? (
+          <div className="rounded-xl border border-dashed border-border bg-background/35 p-6 text-center text-sm text-muted-foreground">
+            {empty}
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
-        <CardHeader>
-          <CardTitle>Account context</CardTitle>
-          <CardDescription>
-            Current session role and identity used for RBAC checks.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 text-sm">
-          <div className="flex items-center justify-between rounded-xl border border-border bg-background/45 p-3">
-            <span className="text-muted-foreground">Signed in as</span>
-            <span className="font-medium">{currentUser.name ?? currentUser.email}</span>
-          </div>
-          <div className="flex items-center justify-between rounded-xl border border-border bg-background/45 p-3">
-            <span className="text-muted-foreground">Global role</span>
-            <Badge variant="outline">{currentUser.role}</Badge>
-          </div>
-          <div className="rounded-xl border border-border bg-background/45 p-3">
-            <p className="text-muted-foreground">Theme</p>
-            <p className="mt-1 text-sm font-medium">
-              Use the header toggle to switch between cyber-dark and light modes.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1313,37 +1441,6 @@ function PriorityPanel({ analytics }: { analytics: DashboardAnalytics }) {
             </Pie>
           </PieChart>
         </ChartContainer>
-      </CardContent>
-    </Card>
-  );
-}
-
-function NotificationPanel({
-  notifications,
-}: {
-  notifications: DashboardNotification[];
-}) {
-  return (
-    <Card className="rounded-2xl border border-border bg-card/55 shadow-sm backdrop-blur-xl">
-      <CardHeader>
-        <CardTitle>Notifications</CardTitle>
-        <CardDescription>Mentions and task events</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        {notifications.slice(0, 5).map((notification) => (
-          <div
-            key={notification.id}
-            className="rounded-xl border border-border bg-background/50 p-3"
-          >
-            <p className="text-sm font-medium">{notification.title}</p>
-            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-              {notification.body}
-            </p>
-          </div>
-        ))}
-        {!notifications.length ? (
-          <p className="text-sm text-muted-foreground">No notifications yet.</p>
-        ) : null}
       </CardContent>
     </Card>
   );

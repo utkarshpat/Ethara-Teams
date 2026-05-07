@@ -12,6 +12,10 @@ import type { projectMessageCreateSchema } from "@/modules/project-chat/validato
 import type { z } from "zod";
 
 type ProjectMessageCreateInput = z.infer<typeof projectMessageCreateSchema>;
+type ProjectMessageCursorInput = {
+  cursor?: string | null;
+  limit?: number;
+};
 
 const projectMessageInclude = {
   user: {
@@ -71,17 +75,39 @@ async function hydrateProjectMessages<
   });
 }
 
-export async function listProjectMessages(userId: string, projectId: string) {
+export async function listProjectMessages(
+  userId: string,
+  projectId: string,
+  input: ProjectMessageCursorInput = {},
+) {
   await ensureProjectMembership({ userId, projectId });
 
+  const requestedLimit =
+    typeof input.limit === "number" && Number.isFinite(input.limit)
+      ? input.limit
+      : 20;
+  const limit = Math.min(Math.max(requestedLimit, 1), 50);
   const messages = await prisma.projectMessage.findMany({
     where: { projectId },
     include: projectMessageInclude,
-    orderBy: { createdAt: "asc" },
-    take: 100,
+    orderBy: { createdAt: "desc" },
+    take: limit + 1,
+    ...(input.cursor
+      ? {
+          cursor: { id: input.cursor },
+          skip: 1,
+        }
+      : {}),
   });
 
-  return hydrateProjectMessages(messages);
+  const hasMore = messages.length > limit;
+  const page = hasMore ? messages.slice(0, limit) : messages;
+  const hydrated = await hydrateProjectMessages([...page].reverse());
+
+  return {
+    items: hydrated,
+    nextCursor: hasMore ? page[page.length - 1]?.id ?? null : null,
+  };
 }
 
 export async function createProjectMessage(
@@ -99,6 +125,10 @@ export async function createProjectMessage(
     },
     include: projectMessageInclude,
   });
+
+  const [hydratedMessage] = await hydrateProjectMessages([message]);
+
+  await triggerProjectEvent(projectId, "project:message_created", hydratedMessage);
 
   const mentionKeys = [...new Set(extractMentionKeys(input.body))];
 
@@ -131,10 +161,6 @@ export async function createProjectMessage(
         ),
     );
   }
-
-  const [hydratedMessage] = await hydrateProjectMessages([message]);
-
-  await triggerProjectEvent(projectId, "project:message_created", hydratedMessage);
 
   logger.info("project_message.created", {
     userId,

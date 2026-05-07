@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, requireApiUser } from "@/lib/api";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { createTask, listProjectTasks, taskCreateSchema } from "@/modules/tasks";
 
 function serializeTask(task: Awaited<ReturnType<typeof listProjectTasks>>[number]) {
@@ -38,6 +39,12 @@ export async function GET(_request: Request, context: ProjectRouteContext) {
 export async function POST(request: Request, context: ProjectRouteContext) {
   try {
     const user = await requireApiUser();
+    enforceRateLimit(request, {
+      scope: "tasks:create",
+      userId: user.id,
+      limit: 20,
+      windowMs: 60_000,
+    });
     const { projectId } = await context.params;
     const input = taskCreateSchema.parse(await request.json());
     const task = await createTask(user.id, projectId, input);
