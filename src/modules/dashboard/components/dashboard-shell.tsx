@@ -658,8 +658,8 @@ function WorkspaceRail({
   onSelect: (view: DashboardView) => void;
 }) {
   return (
-    <aside className="hidden w-[68px] shrink-0 flex-col items-center gap-4 border-r border-white/10 bg-[#17082e]/90 px-3 py-4 text-white lg:flex">
-      <div className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-primary to-[#7e22ce] text-sm font-bold shadow-[0_0_28px_rgba(255,0,255,0.35)]">
+    <aside className="flex w-[58px] shrink-0 flex-col items-center gap-3 border-r border-white/10 bg-[#17082e]/90 px-2 py-3 text-white lg:w-[68px] lg:gap-4 lg:px-3 lg:py-4">
+      <div className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-primary to-[#7e22ce] text-xs font-bold shadow-[0_0_28px_rgba(255,0,255,0.35)] lg:size-11 lg:text-sm">
         ET
       </div>
       <nav className="flex flex-1 flex-col items-center gap-2 pt-2">
@@ -675,7 +675,7 @@ function WorkspaceRail({
               onClick={() => onSelect(item.view)}
               data-href={`${item.href}${selectedProjectId ? `?projectId=${selectedProjectId}` : ""}`}
               className={cn(
-                "relative grid size-11 place-items-center rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white",
+                "relative grid size-10 place-items-center rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white lg:size-11",
                 isActive && "bg-white/12 text-white shadow-inner",
               )}
               aria-label={item.label}
@@ -830,6 +830,7 @@ function WorkspaceSidebar({
               render={
                 <button
                   type="button"
+                  aria-label="Ethara Teams"
                   className="mt-3 flex h-8 w-full items-center justify-between rounded-xl border border-white/10 bg-white/10 px-3 text-xs font-semibold text-white/86 transition hover:bg-white/18"
                 />
               }

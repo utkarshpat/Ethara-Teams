@@ -74,12 +74,23 @@ export async function registerUser(input: RegisterInput) {
       },
     });
 
-    await sendEmail({
+    const delivery = await sendEmail({
       to: email,
       subject: "Verify your Ethara Teams account",
       text: `Verify your Ethara Teams account: ${verificationUrl}`,
       html: `<p>Verify your Ethara Teams account to start collaborating.</p><p><a href="${verificationUrl}">Verify email</a></p>`,
     });
+
+    if (!delivery.sent) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerified: new Date() },
+      });
+      user.emailVerified = new Date();
+      logger.warn("auth.register_auto_verified_email_delivery_unavailable", {
+        userId: user.id,
+      });
+    }
   }
 
   logger.info("auth.register_success", {

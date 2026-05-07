@@ -32,7 +32,17 @@ export async function sendEmail(input: SendEmailInput) {
       html: input.html,
       text: input.text,
     }),
+  }).catch((error) => {
+    logger.error("email.provider_request_failed", error, {
+      to: input.to,
+      subject: input.subject,
+    });
+    return null;
   });
+
+  if (!response) {
+    return { sent: false };
+  }
 
   if (!response.ok) {
     logger.error("email.send_failed", {
